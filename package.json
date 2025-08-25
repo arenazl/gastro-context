@@ -2,13 +2,18 @@
   "name": "gastro-system",
   "version": "1.0.0",
   "description": "Sistema de gestión gastronómica",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
+    "heroku-prebuild": "echo Building gastro system...",
+    "build": "cd frontend && npm install && npm run build",
+    "heroku-postbuild": "cd frontend && npm install --legacy-peer-deps && npm run build && cd .. && mkdir -p backend/static && cp -r frontend/dist/* backend/static/",
+    "start": "cd backend && uvicorn complete_server:app --host 0.0.0.0 --port $PORT",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && python3 simple_fastapi_server.py",
     "dev:frontend": "cd frontend && npm run dev -- --host 0.0.0.0",
-    "install": "cd frontend && npm install",
-    "start": "npm run dev",
-    "stop": "pkill -f 'simple_fastapi_server' && pkill -f 'npm run dev'"
+    "install": "cd frontend && npm install"
   },
   "devDependencies": {
     "concurrently": "^7.6.0"

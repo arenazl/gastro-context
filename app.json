@@ -1,0 +1,57 @@
+{
+  "name": "Sistema Gastronómico",
+  "description": "Sistema completo de gestión para restaurantes",
+  "repository": "https://github.com/tu-usuario/gastro-context",
+  "keywords": ["fastapi", "restaurant", "pos", "mysql"],
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [
+    {
+      "plan": "cleardb:ignite",
+      "as": "DATABASE"
+    }
+  ],
+  "env": {
+    "MYSQL_HOST": {
+      "description": "MySQL host (automático si usas ClearDB addon)",
+      "required": false
+    },
+    "MYSQL_USER": {
+      "description": "MySQL username",
+      "required": false
+    },
+    "MYSQL_PASSWORD": {
+      "description": "MySQL password",
+      "required": false,
+      "generator": "secret"
+    },
+    "MYSQL_DATABASE": {
+      "description": "MySQL database name",
+      "required": false
+    },
+    "JWT_SECRET_KEY": {
+      "description": "Secret key for JWT tokens",
+      "generator": "secret"
+    },
+    "CORS_ORIGINS": {
+      "description": "CORS origins",
+      "value": "*"
+    }
+  },
+  "scripts": {
+    "postdeploy": "cd backend && python setup_database.py"
+  }
+}
