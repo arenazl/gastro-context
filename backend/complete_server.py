@@ -924,7 +924,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             return
             
         # Health check
-        if path == '/' or path == '/health':
+        if path == '/health' or path == '/api/health':
             self.send_json_response({
                 'name': 'Restaurant Management System',
                 'version': '2.0.0',
