@@ -160,14 +160,46 @@ def log_db_operation(operation, query, params=None, result_count=None, execution
     else:
         log_detailed('INFO', 'DATABASE', f"{operation} exitosa", extra_data)
 
-# Configuración MySQL - Aiven
-MYSQL_CONFIG = {
-    'host': 'mysql-aiven-arenazl.e.aivencloud.com',
-    'port': 23108,
-    'user': 'avnadmin',
-    'password': 'AVNS_Fqe0qsChCHnqSnVsvoi',
-    'database': 'gastro'
-}
+# Configuración MySQL - Detectar automáticamente el entorno
+def get_mysql_config():
+    """Obtener configuración de MySQL basada en el entorno"""
+    # Primero intentar con ClearDB (Heroku)
+    cleardb_url = os.environ.get('CLEARDB_DATABASE_URL')
+    if cleardb_url:
+        # Parsear URL de ClearDB: mysql://user:pass@host/database?reconnect=true
+        from urllib.parse import urlparse
+        parsed = urlparse(cleardb_url)
+        return {
+            'host': parsed.hostname,
+            'port': parsed.port or 3306,
+            'user': parsed.username,
+            'password': parsed.password,
+            'database': parsed.path[1:]  # Quitar el '/' inicial
+        }
+    
+    # Luego intentar con JawsDB (Heroku alternativa)
+    jawsdb_url = os.environ.get('JAWSDB_URL')
+    if jawsdb_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(jawsdb_url)
+        return {
+            'host': parsed.hostname,
+            'port': parsed.port or 3306,
+            'user': parsed.username,
+            'password': parsed.password,
+            'database': parsed.path[1:]
+        }
+    
+    # Finalmente usar Aiven para desarrollo local
+    return {
+        'host': os.environ.get('MYSQL_HOST', 'mysql-aiven-arenazl.e.aivencloud.com'),
+        'port': int(os.environ.get('MYSQL_PORT', 23108)),
+        'user': os.environ.get('MYSQL_USER', 'avnadmin'),
+        'password': os.environ.get('MYSQL_PASSWORD', 'AVNS_Fqe0qsChCHnqSnVsvoi'),
+        'database': os.environ.get('MYSQL_DATABASE', 'gastro')
+    }
+
+MYSQL_CONFIG = get_mysql_config()
 
 # Cache simple en memoria (60 segundos)
 cache = {}
@@ -998,9 +1030,9 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                         "connection_pool": "Active"
                     },
                     "database_info": {
-                        "host": "mysql-aiven-arenazl.e.aivencloud.com",
-                        "port": 23108,
-                        "database": "gastro"
+                        "host": MYSQL_CONFIG['host'],
+                        "port": MYSQL_CONFIG['port'],
+                        "database": MYSQL_CONFIG['database']
                     }
                 })
                 
@@ -1016,9 +1048,9 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                     "traceback_lines": traceback.format_exc().split('\n'),
                     "full_traceback": traceback.format_exc(),
                     "connection_details": {
-                        "host": "mysql-aiven-arenazl.e.aivencloud.com",
-                        "port": 23108,
-                        "database": "gastro"
+                        "host": MYSQL_CONFIG['host'],
+                        "port": MYSQL_CONFIG['port'],
+                        "database": MYSQL_CONFIG['database']
                     }
                 }
                 log_detailed('ERROR', 'DATABASE_TEST_ERROR', f"Error en test de BD: {str(e)}", error_details)
