@@ -932,6 +932,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 'server': 'complete_server',
                 'database': 'MySQL Aiven'
             })
+            return
             
         # Crear tabla kitchen_queue_items
         elif path == '/api/create-kitchen-table':
