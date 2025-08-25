@@ -8,7 +8,7 @@
   "scripts": {
     "heroku-prebuild": "echo Building gastro system...",
     "build": "cd frontend && npm install && npm run build",
-    "heroku-postbuild": "cd frontend && npm install --legacy-peer-deps && npm run build && cd .. && echo 'Frontend build complete, files in dist:' && ls -la frontend/dist/",
+    "heroku-postbuild": "cd frontend && npm install --legacy-peer-deps && npm run build && cd .. && rm -rf backend/static/assets backend/static/*.html && cp -r frontend/dist/* backend/static/ && echo 'Files copied to backend/static:' && ls -la backend/static/",
     "start": "node server.js",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && python3 simple_fastapi_server.py",

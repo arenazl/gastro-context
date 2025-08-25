@@ -7,24 +7,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Verificar que los archivos del frontend existen
-const distPath = path.join(__dirname, 'frontend', 'dist');
-console.log('Looking for frontend files in:', distPath);
-if (fs.existsSync(distPath)) {
-  console.log('Frontend dist folder exists');
-  const files = fs.readdirSync(distPath);
-  console.log('Files in dist:', files);
+const staticPath = path.join(__dirname, 'backend', 'static');
+console.log('Looking for frontend files in:', staticPath);
+if (fs.existsSync(staticPath)) {
+  console.log('Backend static folder exists');
+  const files = fs.readdirSync(staticPath);
+  console.log('Files in static:', files);
   
-  const assetsPath = path.join(distPath, 'assets');
+  const assetsPath = path.join(staticPath, 'assets');
   if (fs.existsSync(assetsPath)) {
     const assetFiles = fs.readdirSync(assetsPath);
     console.log('Files in assets:', assetFiles);
   }
 } else {
-  console.error('WARNING: Frontend dist folder does not exist!');
+  console.error('WARNING: Backend static folder does not exist!');
 }
 
-// Servir archivos estáticos del frontend
-app.use(express.static(distPath));
+// Servir archivos estáticos del frontend desde backend/static
+app.use(express.static(staticPath));
 
 // Proxy todas las rutas /api al backend Python
 app.use('/api', createProxyMiddleware({
@@ -44,7 +44,7 @@ app.use('/static', express.static(path.join(__dirname, 'backend', 'static')));
 
 // Todas las demás rutas sirven el index.html (para React Router)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
+  res.sendFile(path.join(__dirname, 'backend', 'static', 'index.html'));
 });
 
 // Iniciar servidor
