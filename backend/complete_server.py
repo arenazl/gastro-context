@@ -3535,24 +3535,21 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
 
     def serve_frontend(self, path):
         """Serve frontend static files (React build)"""
-        # Si es un archivo de assets, servirlo directamente
-        if path.startswith('/assets/'):
+        # Determinar qué archivo servir
+        if path.startswith('/assets/') or path.endswith('.js') or path.endswith('.css') or path.endswith('.svg') or path.endswith('.png') or path.endswith('.jpg'):
+            # Es un archivo estático, intentar servirlo
             file_path = os.path.join(STATIC_DIR, path.lstrip('/'))
-        # Si es la raíz o una ruta de React, servir index.html
-        elif path == '/' or (not path.startswith('/api') and not path.startswith('/static')):
-            file_path = os.path.join(STATIC_DIR, 'index.html')
+            # Si no existe, devolver 404 (no index.html para archivos estáticos)
+            if not os.path.exists(file_path):
+                self.send_error(404)
+                return
         else:
-            # Servir el archivo solicitado
-            file_path = os.path.join(STATIC_DIR, path.lstrip('/'))
-        
-        # Si el archivo no existe, servir index.html (para React Router)
-        if not os.path.exists(file_path):
+            # Es una ruta de la app, servir index.html
             file_path = os.path.join(STATIC_DIR, 'index.html')
-        
-        # Verificar que el archivo existe
-        if not os.path.exists(file_path):
-            self.send_error(404)
-            return
+            # Si index.html no existe, devolver 404
+            if not os.path.exists(file_path):
+                self.send_error(404)
+                return
         
         # Obtener tipo MIME
         mime_type, _ = mimetypes.guess_type(file_path)
