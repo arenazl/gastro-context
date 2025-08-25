@@ -1,0 +1,7 @@
+{
+  "name": "database-setup",
+  "version": "1.0.0",
+  "dependencies": {
+    "mysql2": "^3.6.5"
+  }
+}

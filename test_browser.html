@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend Connection</title>
+</head>
+<body>
+    <h1>Test de Conexión Frontend-Backend</h1>
+    <div id="status"></div>
+    <div id="results"></div>
+    
+    <script>
+        async function testConnection() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            // Test 1: Frontend
+            statusDiv.innerHTML = '<h2>1. Probando Frontend...</h2>';
+            try {
+                const frontResponse = await fetch('http://localhost:5173');
+                resultsDiv.innerHTML += `<p>Frontend: ${frontResponse.status === 200 ? '✅ OK' : '❌ Error'} - Status ${frontResponse.status}</p>`;
+            } catch (e) {
+                resultsDiv.innerHTML += `<p>Frontend: ❌ Error - ${e.message}</p>`;
+            }
+            
+            // Test 2: Backend
+            statusDiv.innerHTML = '<h2>2. Probando Backend...</h2>';
+            try {
+                const backResponse = await fetch('http://localhost:9000/health');
+                const data = await backResponse.json();
+                resultsDiv.innerHTML += `<p>Backend: ${backResponse.status === 200 ? '✅ OK' : '❌ Error'} - Status ${backResponse.status}</p>`;
+                resultsDiv.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (e) {
+                resultsDiv.innerHTML += `<p>Backend: ❌ Error - ${e.message}</p>`;
+            }
+            
+            // Test 3: Login
+            statusDiv.innerHTML = '<h2>3. Probando Login...</h2>';
+            try {
+                const loginResponse = await fetch('http://localhost:9000/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@restaurant.com',
+                        password: 'admin'
+                    })
+                });
+                const loginData = await loginResponse.json();
+                resultsDiv.innerHTML += `<p>Login: ${loginResponse.status === 200 ? '✅ OK' : '❌ Error'} - Status ${loginResponse.status}</p>`;
+                resultsDiv.innerHTML += `<pre>${JSON.stringify(loginData, null, 2)}</pre>`;
+            } catch (e) {
+                resultsDiv.innerHTML += `<p>Login: ❌ Error - ${e.message}</p>`;
+            }
+            
+            statusDiv.innerHTML = '<h2>✅ Pruebas Completadas</h2>';
+        }
+        
+        // Ejecutar al cargar
+        testConnection();
+    </script>
+</body>
+</html>

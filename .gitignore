@@ -1,0 +1,499 @@
+# ==================================
+# Python / FastAPI Backend
+# ==================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# FastAPI specific
+.pytest_cache/
+
+# ==================================
+# Node.js / Next.js Frontend
+# ==================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Next.js build output
+.next/
+out/
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+storybook-static
+
+# Temporary folders
+tmp/
+temp/
+
+# ==================================
+# Base de Datos
+# ==================================
+
+# PostgreSQL
+*.sql
+*.dump
+*.backup
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Database migrations (keep structure, ignore data)
+**/migrations/versions/*.py
+!**/migrations/versions/__init__.py
+
+# ==================================
+# Docker & Containerización  
+# ==================================
+
+# Docker
+.dockerignore
+Dockerfile.dev
+docker-compose.override.yml
+
+# ==================================
+# IDE & Editores
+# ==================================
+
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+[._]*.s[a-v][a-z]
+!*.svg
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==================================
+# Sistema Operativo
+# ==================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==================================
+# Logs & Monitoreo
+# ==================================
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime logs
+*.log
+logs/
+
+# ==================================
+# Archivos del Sistema Gastronómico
+# ==================================
+
+# Uploads de productos (imágenes, menús)
+uploads/
+static/uploads/
+media/
+
+# Reportes generados
+reports/
+exports/
+*.pdf
+*.xlsx
+*.csv
+
+# Backups de base de datos
+backups/
+*.backup
+*.sql.gz
+
+# Certificados y claves (¡NUNCA commitear!)
+certificates/
+*.pem
+*.key
+*.crt
+*.p12
+
+# Configuración de impresoras térmicas
+printer_configs/
+*.cfg
+
+# ==================================
+# Research & Context Engineering
+# ==================================
+
+# Research scrapeado (se regenera automáticamente)
+research/*/
+!research/README.md
+
+# PRPs generados (commitear solo templates)
+PRPs/*.md
+!PRPs/templates/
+
+# Archivos temporales de Context Engineering
+output/
+temp_research/
+scraped_docs/
+
+# ==================================
+# Configuración Específica del Proyecto
+# ==================================
+
+# Variables de entorno (usar .env.example como template)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Configuración local de desarrollo
+config.local.json
+settings.local.json
+
+# Datos de testing/desarrollo
+test_data/
+sample_data/
+dev_fixtures/
+
+# ==================================
+# Servicios Externos
+# ==================================
+
+# Stripe
+stripe_events.json
+webhooks_test.json
+
+# Claves de API (¡NUNCA commitear!)
+api_keys.json
+secrets.json
+
+# ==================================
+# Performance & Cache
+# ==================================
+
+# Cache de aplicación
+.cache/
+cache/
+.parcel-cache/
+
+# Archivos de performance profiling
+*.prof
+*.profile
+
+# ==================================
+# Testing
+# ==================================
+
+# Test results
+test-results/
+.nyc_output/
+coverage/
+*.coverage
+htmlcov/
+
+# E2E testing
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ==================================
+# Build & Distribution
+# ==================================
+
+# Build outputs
+build/
+dist/
+out/
+
+# Static generation
+static/
+
+# ==================================
+# Misceláneos Específicos del Negocio
+# ==================================
+
+# Datos de ventas reales (no commitear)
+sales_data/
+real_orders/
+customer_data/
+
+# Configuración de hardware POS
+pos_config/
+hardware_settings/
+
+# Layouts de restaurante personalizados
+restaurant_layouts/
+table_configs/
+
+# Archivos de facturación electrónica
+invoices/
+tax_reports/
+
+# ==================================
+# Archivos que SÍ queremos commitear
+# ==================================
+
+# Estos son comentarios de lo que SÍ incluir:
+# ✅ .env.example (template de variables)
+# ✅ docker-compose.yml (configuración Docker)
+# ✅ requirements.txt / package.json (dependencias)
+# ✅ alembic/ (migraciones de DB, estructura)
+# ✅ tests/ (todos los tests)
+# ✅ examples/ (patrones de código)
+# ✅ PRPs/templates/ (templates de Context Engineering)
+# ✅ CLAUDE.md, INITIAL.md, README.md (documentación)
+# ✅ .gitignore (este archivo)
+# ✅ Código fuente (backend/, frontend/, etc.)

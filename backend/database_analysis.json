@@ -1,0 +1,948 @@
+{
+  "database": "coomlook",
+  "total_tables": 5,
+  "tables": {
+    "brands": {
+      "column_count": 10,
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint unsigned",
+          "null": false,
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "slug",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "logo",
+          "type": "varchar(512)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "website",
+          "type": "varchar(512)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "active",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "now()",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "now()",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "row_count": 5,
+      "engine": "InnoDB",
+      "charset": "utf8mb4_0900_ai_ci",
+      "collation": null,
+      "auto_increment": 11
+    },
+    "carts": {
+      "column_count": 13,
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "PRI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "user_id",
+          "type": "int",
+          "null": true,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "session_id",
+          "type": "varchar(255)",
+          "null": true,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "items",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": "_utf8mb4\\'[]\\'",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "subtotal",
+          "type": "decimal(10,2)",
+          "null": true,
+          "key": "",
+          "default": "0.00",
+          "extra": ""
+        },
+        {
+          "name": "tax",
+          "type": "decimal(10,2)",
+          "null": true,
+          "key": "",
+          "default": "0.00",
+          "extra": ""
+        },
+        {
+          "name": "shipping",
+          "type": "decimal(10,2)",
+          "null": true,
+          "key": "",
+          "default": "0.00",
+          "extra": ""
+        },
+        {
+          "name": "total",
+          "type": "decimal(10,2)",
+          "null": true,
+          "key": "",
+          "default": "0.00",
+          "extra": ""
+        },
+        {
+          "name": "currency",
+          "type": "varchar(3)",
+          "null": true,
+          "key": "",
+          "default": "USD",
+          "extra": ""
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "row_count": 0,
+      "engine": "InnoDB",
+      "charset": "utf8mb4_0900_ai_ci",
+      "collation": null,
+      "auto_increment": null
+    },
+    "categories": {
+      "column_count": 11,
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": false,
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "slug",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "image",
+          "type": "varchar(512)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "parent_id",
+          "type": "int",
+          "null": true,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "active",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "sort_order",
+          "type": "int",
+          "null": true,
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "row_count": 5,
+      "engine": "InnoDB",
+      "charset": "utf8mb4_0900_ai_ci",
+      "collation": null,
+      "auto_increment": 11
+    },
+    "products": {
+      "column_count": 31,
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": false,
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "sku",
+          "type": "varchar(100)",
+          "null": false,
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "slug",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "short_description",
+          "type": "text",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "price",
+          "type": "decimal(10,2)",
+          "null": false,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "compare_at_price",
+          "type": "decimal(10,2)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "cost",
+          "type": "decimal(10,2)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "stock",
+          "type": "int",
+          "null": false,
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "low_stock_threshold",
+          "type": "int",
+          "null": true,
+          "key": "",
+          "default": "10",
+          "extra": ""
+        },
+        {
+          "name": "track_quantity",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "allow_backorder",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "images",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": "_utf8mb4\\'[]\\'",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "category_id",
+          "type": "int",
+          "null": true,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "brand_id",
+          "type": "int",
+          "null": true,
+          "key": "MUL",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": "_utf8mb4\\'[]\\'",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "weight",
+          "type": "decimal(8,3)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "dimensions",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "featured",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "MUL",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "active",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "MUL",
+          "default": "1",
+          "extra": ""
+        },
+        {
+          "name": "published_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "seo_title",
+          "type": "varchar(255)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "seo_description",
+          "type": "text",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "view_count",
+          "type": "int",
+          "null": true,
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "sales_count",
+          "type": "int",
+          "null": true,
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "rating",
+          "type": "decimal(3,2)",
+          "null": true,
+          "key": "",
+          "default": "0.00",
+          "extra": ""
+        },
+        {
+          "name": "review_count",
+          "type": "int",
+          "null": true,
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "row_count": 8,
+      "engine": "InnoDB",
+      "charset": "utf8mb4_0900_ai_ci",
+      "collation": null,
+      "auto_increment": 9
+    },
+    "users": {
+      "column_count": 13,
+      "columns": [
+        {
+          "name": "id",
+          "type": "int",
+          "null": false,
+          "key": "PRI",
+          "default": null,
+          "extra": "auto_increment"
+        },
+        {
+          "name": "email",
+          "type": "varchar(255)",
+          "null": false,
+          "key": "UNI",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "password",
+          "type": "varchar(255)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "role",
+          "type": "varchar(50)",
+          "null": false,
+          "key": "MUL",
+          "default": "customer",
+          "extra": ""
+        },
+        {
+          "name": "email_verified",
+          "type": "tinyint(1)",
+          "null": true,
+          "key": "",
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "avatar",
+          "type": "varchar(512)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "phone",
+          "type": "varchar(50)",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "date_of_birth",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "last_login_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "null": true,
+          "key": "",
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ],
+      "row_count": 0,
+      "engine": "InnoDB",
+      "charset": "utf8mb4_0900_ai_ci",
+      "collation": null,
+      "auto_increment": 1
+    }
+  },
+  "indexes": {
+    "brands": {
+      "PRIMARY": {
+        "columns": [
+          "id"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "id": {
+        "columns": [
+          "id"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "brands_slug_unique": {
+        "columns": [
+          "slug"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "slug_idx": {
+        "columns": [
+          "slug"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      }
+    },
+    "carts": {
+      "PRIMARY": {
+        "columns": [
+          "id"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "idx_user": {
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_session": {
+        "columns": [
+          "session_id"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_expires": {
+        "columns": [
+          "expires_at"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      }
+    },
+    "categories": {
+      "PRIMARY": {
+        "columns": [
+          "id"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "slug": {
+        "columns": [
+          "slug"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "idx_slug": {
+        "columns": [
+          "slug"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_parent": {
+        "columns": [
+          "parent_id"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_active": {
+        "columns": [
+          "active"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      }
+    },
+    "products": {
+      "PRIMARY": {
+        "columns": [
+          "id"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "sku": {
+        "columns": [
+          "sku"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "slug": {
+        "columns": [
+          "slug"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "idx_sku": {
+        "columns": [
+          "sku"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_slug": {
+        "columns": [
+          "slug"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_category": {
+        "columns": [
+          "category_id"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_brand": {
+        "columns": [
+          "brand_id"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_price": {
+        "columns": [
+          "price"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_stock": {
+        "columns": [
+          "stock"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_featured": {
+        "columns": [
+          "featured",
+          "active"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_active": {
+        "columns": [
+          "active"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      }
+    },
+    "users": {
+      "PRIMARY": {
+        "columns": [
+          "id"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "email": {
+        "columns": [
+          "email"
+        ],
+        "unique": true,
+        "type": "BTREE"
+      },
+      "idx_email": {
+        "columns": [
+          "email"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      },
+      "idx_role": {
+        "columns": [
+          "role"
+        ],
+        "unique": false,
+        "type": "BTREE"
+      }
+    }
+  },
+  "recommendations": [
+    {
+      "type": "MISSING_INDEX",
+      "table": "products",
+      "description": "Add index on products(category_id, is_available)",
+      "sql": "CREATE INDEX idx_products_category_available ON products(category_id, is_available)",
+      "priority": "HIGH"
+    },
+    {
+      "type": "MISSING_INDEX",
+      "table": "products",
+      "description": "Add index on products(is_available)",
+      "sql": "CREATE INDEX idx_products_available ON products(is_available)",
+      "priority": "HIGH"
+    },
+    {
+      "type": "MISSING_INDEX",
+      "table": "users",
+      "description": "Add index on users(role, is_active)",
+      "sql": "CREATE INDEX idx_users_role_active ON users(role, is_active)",
+      "priority": "HIGH"
+    },
+    {
+      "type": "CHARSET_OPTIMIZATION",
+      "table": "brands",
+      "description": "Update brands to utf8mb4_unicode_ci collation",
+      "sql": "ALTER TABLE brands CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "priority": "LOW"
+    },
+    {
+      "type": "CHARSET_OPTIMIZATION",
+      "table": "carts",
+      "description": "Update carts to utf8mb4_unicode_ci collation",
+      "sql": "ALTER TABLE carts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "priority": "LOW"
+    },
+    {
+      "type": "CHARSET_OPTIMIZATION",
+      "table": "categories",
+      "description": "Update categories to utf8mb4_unicode_ci collation",
+      "sql": "ALTER TABLE categories CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "priority": "LOW"
+    },
+    {
+      "type": "CHARSET_OPTIMIZATION",
+      "table": "products",
+      "description": "Update products to utf8mb4_unicode_ci collation",
+      "sql": "ALTER TABLE products CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "priority": "LOW"
+    },
+    {
+      "type": "CHARSET_OPTIMIZATION",
+      "table": "users",
+      "description": "Update users to utf8mb4_unicode_ci collation",
+      "sql": "ALTER TABLE users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "priority": "LOW"
+    }
+  ],
+  "analyzed_at": "2025-08-13T08:32:17.727971"
+}

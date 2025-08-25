@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: gastro_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword123
+      MYSQL_DATABASE: gastro
+      MYSQL_USER: gastro_user
+      MYSQL_PASSWORD: gastro_pass123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - gastro_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+
+  # Redis for caching and WebSocket pub/sub
+  redis:
+    image: redis:7-alpine
+    container_name: gastro_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - gastro_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      retries: 10
+
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gastro_backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=mysql+aiomysql://gastro_user:gastro_pass123@mysql:3306/gastro
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-sk_test_your_stripe_test_key}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    ports:
+      - "9000:9000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gastro_network
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 9000 --reload
+
+  # Frontend React+Vite
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:9000
+        - VITE_WS_URL=ws://localhost:9000
+    container_name: gastro_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - gastro_network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+  # Nginx (production only)
+  nginx:
+    image: nginx:alpine
+    container_name: gastro_nginx
+    restart: unless-stopped
+    profiles:
+      - production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/certs:/etc/nginx/certs
+      - ./frontend/dist:/usr/share/nginx/html
+    depends_on:
+      - backend
+    networks:
+      - gastro_network
+
+  # phpMyAdmin (development tools)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: gastro_phpmyadmin
+    restart: unless-stopped
+    profiles:
+      - tools
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: gastro_user
+      PMA_PASSWORD: gastro_pass123
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
+    networks:
+      - gastro_network
+
+  # Redis Commander (development tools)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: gastro_redis_commander
+    restart: unless-stopped
+    profiles:
+      - tools
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - gastro_network
+
+networks:
+  gastro_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
