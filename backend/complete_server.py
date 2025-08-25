@@ -18,15 +18,15 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 from urllib.parse import urlparse, parse_qs
-from crash_diagnostics import CrashDiagnostics
-from mercadopago_config import create_payment_preference, process_webhook
-import google.generativeai as genai
+# from crash_diagnostics import CrashDiagnostics
+# from mercadopago_config import create_payment_preference, process_webhook
+# import google.generativeai as genai
 
 PORT = 9002
 
-# Configurar Gemini AI
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyD7N-EUhvQ5NI9c8PTwewkuCiX8QvRVgfw')
-genai.configure(api_key=GEMINI_API_KEY)
+# Configurar Gemini AI (comentado por ahora)
+# GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyD7N-EUhvQ5NI9c8PTwewkuCiX8QvRVgfw')
+# genai.configure(api_key=GEMINI_API_KEY)
 
 # Directorio para imágenes estáticas
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
@@ -103,7 +103,7 @@ logger.info("🚀 Sistema de logging inicializado")
 logger.info(f"📁 Logs guardados en: {LOG_DIR}")
 
 # Inicializar sistema de diagnósticos
-crash_diagnostics = CrashDiagnostics(LOG_DIR)
+# crash_diagnostics = CrashDiagnostics(LOG_DIR)
 logger.info("🔍 Sistema de diagnósticos de crashes inicializado")
 
 def log_detailed(level, category, message, extra_data=None):
