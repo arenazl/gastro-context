@@ -9,11 +9,15 @@
     "heroku-prebuild": "echo Building gastro system...",
     "build": "cd frontend && npm install && npm run build",
     "heroku-postbuild": "cd frontend && npm install --legacy-peer-deps && npm run build && cd .. && rm -rf backend/static && mkdir -p backend/static && cp -r frontend/dist/* backend/static/ && ls -la backend/static/",
-    "start": "cd backend && python complete_server.py",
+    "start": "node server.js",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && python3 simple_fastapi_server.py",
     "dev:frontend": "cd frontend && npm run dev -- --host 0.0.0.0",
     "install": "cd frontend && npm install"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6"
   },
   "devDependencies": {
     "concurrently": "^7.6.0"
