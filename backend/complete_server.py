@@ -1505,7 +1505,8 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error_response(500, str(e))
         
         else:
-            self.send_error(404)
+            # Servir archivos estáticos del frontend
+            self.serve_frontend(path)
     
     def do_POST(self):
         """Handle POST requests"""
@@ -3531,6 +3532,50 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             print(f"Error sirviendo archivo estático: {e}")
             self.send_error(500)
 
+    def serve_frontend(self, path):
+        """Serve frontend static files (React build)"""
+        # Si es la raíz o una ruta de React, servir index.html
+        if path == '/' or not path.startswith('/api') and not path.startswith('/static'):
+            file_path = os.path.join(STATIC_DIR, 'index.html')
+        else:
+            # Servir el archivo solicitado
+            file_path = os.path.join(STATIC_DIR, path.lstrip('/'))
+        
+        # Si el archivo no existe, servir index.html (para React Router)
+        if not os.path.exists(file_path):
+            file_path = os.path.join(STATIC_DIR, 'index.html')
+        
+        # Verificar que el archivo existe
+        if not os.path.exists(file_path):
+            self.send_error(404)
+            return
+        
+        # Obtener tipo MIME
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if not mime_type:
+            if file_path.endswith('.js'):
+                mime_type = 'application/javascript'
+            elif file_path.endswith('.css'):
+                mime_type = 'text/css'
+            elif file_path.endswith('.html'):
+                mime_type = 'text/html'
+            else:
+                mime_type = 'application/octet-stream'
+        
+        # Enviar archivo
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', mime_type)
+                self.send_header('Content-Length', str(len(content)))
+                self.send_header('Cache-Control', 'public, max-age=3600')
+                self.end_headers()
+                self.wfile.write(content)
+        except Exception as e:
+            logger.error(f"Error sirviendo frontend: {e}")
+            self.send_error(500)
+    
     def create_customer(self, data):
         """Crear un nuevo cliente"""
         connection = None

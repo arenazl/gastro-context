@@ -2,7 +2,11 @@ import axios from 'axios';
 import type { AxiosInstance } from 'axios';
 
 // API configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
+// In production (Heroku), use relative URL since frontend is served from backend
+// In development, use the specific backend URL
+const API_URL = import.meta.env.VITE_API_URL === '' 
+  ? '' // Empty string means use relative URLs (same origin)
+  : (import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002');
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
