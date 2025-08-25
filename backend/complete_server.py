@@ -22,7 +22,8 @@ from urllib.parse import urlparse, parse_qs
 # from mercadopago_config import create_payment_preference, process_webhook
 # import google.generativeai as genai
 
-PORT = 9002
+# Usar puerto de Heroku si está disponible, sino usar 9002 para desarrollo local
+PORT = int(os.environ.get('PORT', 9002))
 
 # Configurar Gemini AI (comentado por ahora)
 # GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyD7N-EUhvQ5NI9c8PTwewkuCiX8QvRVgfw')

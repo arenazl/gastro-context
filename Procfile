@@ -1,1 +1,1 @@
-web: cd backend && uvicorn complete_server:app --host 0.0.0.0 --port $PORT
+web: cd backend && python complete_server.py
