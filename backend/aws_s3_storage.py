@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class S3ImageStorage:
     def __init__(self):
         # Configuración de AWS desde variables de entorno
-        self.aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID', 'AKIATI3QXLJ4VE3LBKFN')
-        self.aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY', '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')
-        self.bucket_name = os.environ.get('AWS_BUCKET_NAME', 'sisbarrios')
+        self.aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
+        self.aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+        self.bucket_name = os.environ.get('AWS_BUCKET_NAME')
         self.region = os.environ.get('AWS_REGION', 'sa-east-1')
         
         # Carpeta específica para el proyecto gastronómico

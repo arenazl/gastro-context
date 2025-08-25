@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Configuración de base de datos
 DB_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST', 'mysql-aiven-arenazl.e.aivencloud.com'),
-    'port': int(os.environ.get('MYSQL_PORT', 23108)),
-    'user': os.environ.get('MYSQL_USER', 'avnadmin'),
-    'password': os.environ.get('MYSQL_PASSWORD', 'AVNS_Fqe0qsChCHnqSnVsvoi'),
-    'database': os.environ.get('MYSQL_DATABASE', 'gastro')
+    'host': os.environ.get('MYSQL_HOST'),
+    'port': int(os.environ.get('MYSQL_PORT', 3306)),
+    'user': os.environ.get('MYSQL_USER'),
+    'password': os.environ.get('MYSQL_PASSWORD'),
+    'database': os.environ.get('MYSQL_DATABASE')
 }
 
 def migrate_local_images():
