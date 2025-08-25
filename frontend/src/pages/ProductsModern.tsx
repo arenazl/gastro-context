@@ -84,7 +84,7 @@ export const ProductsModern: React.FC = () => {
       const newController = new AbortController();
       setAbortController(newController);
       setLoading(true);
-      
+
       const [productsRes, categoriesRes] = await Promise.all([
         fetch(`${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products`, {
           signal: newController.signal
@@ -112,19 +112,19 @@ export const ProductsModern: React.FC = () => {
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          product.description.toLowerCase().includes(searchQuery.toLowerCase());
+      product.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category_id === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const handleSaveProduct = async () => {
     try {
-      const url = editingProduct 
+      const url = editingProduct
         ? `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products/${editingProduct.id}`
         : `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products`;
-      
+
       const method = editingProduct ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -148,7 +148,7 @@ export const ProductsModern: React.FC = () => {
 
   const handleDeleteProduct = async (id: number) => {
     if (!confirm('Are you sure you want to delete this product?')) return;
-    
+
     try {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products/${id}`,
@@ -190,7 +190,7 @@ export const ProductsModern: React.FC = () => {
   return (
     <div>
       {/* Page Header with Actions */}
-      <PageHeader 
+      <PageHeader
         title="Productos"
         subtitle={`${filteredProducts.length} productos • ${products.filter(p => p.available).length} disponibles • ${categories.length} categorías`}
         actions={[
@@ -214,7 +214,7 @@ export const ProductsModern: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Search */}
           <div className="flex-1 relative">
-            <MagnifyingGlassIcon 
+            <MagnifyingGlassIcon
               className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5"
               style={{ color: theme.colors.textMuted }}
             />
@@ -287,220 +287,220 @@ export const ProductsModern: React.FC = () => {
 
       {/* Products Grid/List */}
       <div className="mt-6">
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <motion.div
-            className="h-12 w-12 border-4 rounded-full"
-            style={{
-              borderColor: theme.colors.primary + '20',
-              borderTopColor: theme.colors.primary
-            }}
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          />
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product, index) => {
-            const category = categories.find(c => c.id === product.category_id);
-            
-            return (
-              <AnimatedCard
-                key={product.id}
-                delay={index * 0.05}
-                className="overflow-hidden group"
-                whileHover={{ y: -8 }}
-              >
-                {/* Image */}
-                <div className="aspect-square relative overflow-hidden">
-                  {product.image_url ? (
-                    <motion.img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                      whileHover={{ scale: 1.1 }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  ) : (
-                    <div 
-                      className="w-full h-full flex items-center justify-center"
-                      style={{ backgroundColor: theme.colors.surface }}
-                    >
-                      <PhotoIcon className="h-12 w-12" style={{ color: theme.colors.textMuted }} />
-                    </div>
-                  )}
-                  
-                  {/* Actions Overlay */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                    className="absolute inset-0 bg-black/50 flex items-center justify-center gap-2"
-                  >
-                    <motion.button
-                      onClick={() => openEditModal(product)}
-                      className="p-2 rounded-lg bg-white/90"
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                    >
-                      <PencilIcon className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                    </motion.button>
-                    <motion.button
-                      onClick={() => handleDeleteProduct(product.id)}
-                      className="p-2 rounded-lg bg-white/90"
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                    >
-                      <TrashIcon className="h-5 w-5" style={{ color: theme.colors.error }} />
-                    </motion.button>
-                  </motion.div>
-
-                  {/* Status Badge */}
-                  <div className="absolute top-2 right-2">
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="px-2 py-1 rounded-full text-xs font-medium"
-                      style={{
-                        backgroundColor: product.available ? theme.colors.success + '90' : theme.colors.error + '90',
-                        color: 'white'
-                      }}
-                    >
-                      {product.available ? 'Available' : 'Unavailable'}
-                    </motion.span>
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold" style={{ color: theme.colors.text }}>
-                      {product.name}
-                    </h3>
-                    <span className="text-lg font-bold" style={{ color: theme.colors.primary }}>
-                      ${product.price}
-                    </span>
-                  </div>
-                  <p className="text-sm mb-3 line-clamp-2" style={{ color: theme.colors.textMuted }}>
-                    {product.description}
-                  </p>
-                  {category && (
-                    <div 
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
-                      style={{
-                        backgroundColor: category.color + '20',
-                        color: category.color
-                      }}
-                    >
-                      <CategoryIcon icon={category.icon} size="xs" />
-                      <span>{category.name}</span>
-                    </div>
-                  )}
-                </div>
-              </AnimatedCard>
-            );
-          })}
-        </div>
-      ) : (
-        <GlassPanel>
-          <div className="space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <motion.div
+              className="h-12 w-12 border-4 rounded-full"
+              style={{
+                borderColor: theme.colors.primary + '20',
+                borderTopColor: theme.colors.primary
+              }}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product, index) => {
               const category = categories.find(c => c.id === product.category_id);
-              
+
               return (
-                <motion.div
+                <AnimatedCard
                   key={product.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-4 rounded-lg flex items-center justify-between hover:shadow-md transition-all"
-                  style={{ backgroundColor: theme.colors.surface }}
-                  whileHover={{ scale: 1.01 }}
+                  delay={index * 0.05}
+                  className="overflow-hidden group"
+                  whileHover={{ y: -8 }}
                 >
-                  <div className="flex items-center gap-4">
-                    {/* Image */}
-                    <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                      {product.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt={product.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div 
-                          className="w-full h-full flex items-center justify-center"
-                          style={{ backgroundColor: theme.colors.background }}
-                        >
-                          <PhotoIcon className="h-6 w-6" style={{ color: theme.colors.textMuted }} />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-semibold" style={{ color: theme.colors.text }}>
-                          {product.name}
-                        </h3>
-                        {category && (
-                          <span 
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs"
-                            style={{
-                              backgroundColor: category.color + '20',
-                              color: category.color
-                            }}
-                          >
-                            <CategoryIcon icon={category.icon} size="xs" />
-                            {category.name}
-                          </span>
-                        )}
-                        <span 
-                          className="px-2 py-1 rounded text-xs font-medium"
-                          style={{
-                            backgroundColor: product.available ? theme.colors.success + '20' : theme.colors.error + '20',
-                            color: product.available ? theme.colors.success : theme.colors.error
-                          }}
-                        >
-                          {product.available ? 'Available' : 'Unavailable'}
-                        </span>
+                  {/* Image */}
+                  <div className="aspect-square relative overflow-hidden">
+                    {product.image_url ? (
+                      <motion.img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                        whileHover={{ scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ backgroundColor: theme.colors.surface }}
+                      >
+                        <PhotoIcon className="h-12 w-12" style={{ color: theme.colors.textMuted }} />
                       </div>
-                      <p className="text-sm" style={{ color: theme.colors.textMuted }}>
-                        {product.description}
-                      </p>
-                    </div>
-                  </div>
+                    )}
 
-                  {/* Price & Actions */}
-                  <div className="flex items-center gap-4">
-                    <span className="text-xl font-bold" style={{ color: theme.colors.primary }}>
-                      ${product.price}
-                    </span>
-                    <div className="flex gap-2">
+                    {/* Actions Overlay */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      whileHover={{ opacity: 1 }}
+                      className="absolute inset-0 bg-black/50 flex items-center justify-center gap-2"
+                    >
                       <motion.button
                         onClick={() => openEditModal(product)}
-                        className="p-2 rounded-lg"
-                        style={{ backgroundColor: theme.colors.primary + '20' }}
+                        className="p-2 rounded-lg bg-white/90"
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                       >
-                        <PencilIcon className="h-4 w-4" style={{ color: theme.colors.primary }} />
+                        <PencilIcon className="h-5 w-5" style={{ color: theme.colors.primary }} />
                       </motion.button>
                       <motion.button
                         onClick={() => handleDeleteProduct(product.id)}
-                        className="p-2 rounded-lg"
-                        style={{ backgroundColor: theme.colors.error + '20' }}
+                        className="p-2 rounded-lg bg-white/90"
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
                       >
-                        <TrashIcon className="h-4 w-4" style={{ color: theme.colors.error }} />
+                        <TrashIcon className="h-5 w-5" style={{ color: theme.colors.error }} />
                       </motion.button>
+                    </motion.div>
+
+                    {/* Status Badge */}
+                    <div className="absolute top-2 right-2">
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="px-2 py-1 rounded-full text-xs font-medium"
+                        style={{
+                          backgroundColor: product.available ? theme.colors.success + '90' : theme.colors.error + '90',
+                          color: 'white'
+                        }}
+                      >
+                        {product.available ? 'Available' : 'Unavailable'}
+                      </motion.span>
                     </div>
                   </div>
-                </motion.div>
+
+                  {/* Info */}
+                  <div className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold" style={{ color: theme.colors.text }}>
+                        {product.name}
+                      </h3>
+                      <span className="text-lg font-bold" style={{ color: theme.colors.primary }}>
+                        ${product.price}
+                      </span>
+                    </div>
+                    <p className="text-sm mb-3 line-clamp-2" style={{ color: theme.colors.textMuted }}>
+                      {product.description}
+                    </p>
+                    {category && (
+                      <div
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
+                        style={{
+                          backgroundColor: category.color + '20',
+                          color: category.color
+                        }}
+                      >
+                        <CategoryIcon icon={category.icon} size="xs" />
+                        <span>{category.name}</span>
+                      </div>
+                    )}
+                  </div>
+                </AnimatedCard>
               );
             })}
           </div>
-        </GlassPanel>
-      )}
+        ) : (
+          <GlassPanel>
+            <div className="space-y-3">
+              {filteredProducts.map((product, index) => {
+                const category = categories.find(c => c.id === product.category_id);
+
+                return (
+                  <motion.div
+                    key={product.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-4 rounded-lg flex items-center justify-between hover:shadow-md transition-all"
+                    style={{ backgroundColor: theme.colors.surface }}
+                    whileHover={{ scale: 1.01 }}
+                  >
+                    <div className="flex items-center gap-4">
+                      {/* Image */}
+                      <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                        {product.image_url ? (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ backgroundColor: theme.colors.background }}
+                          >
+                            <PhotoIcon className="h-6 w-6" style={{ color: theme.colors.textMuted }} />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-semibold" style={{ color: theme.colors.text }}>
+                            {product.name}
+                          </h3>
+                          {category && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs"
+                              style={{
+                                backgroundColor: category.color + '20',
+                                color: category.color
+                              }}
+                            >
+                              <CategoryIcon icon={category.icon} size="xs" />
+                              {category.name}
+                            </span>
+                          )}
+                          <span
+                            className="px-2 py-1 rounded text-xs font-medium"
+                            style={{
+                              backgroundColor: product.available ? theme.colors.success + '20' : theme.colors.error + '20',
+                              color: product.available ? theme.colors.success : theme.colors.error
+                            }}
+                          >
+                            {product.available ? 'Available' : 'Unavailable'}
+                          </span>
+                        </div>
+                        <p className="text-sm" style={{ color: theme.colors.textMuted }}>
+                          {product.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Price & Actions */}
+                    <div className="flex items-center gap-4">
+                      <span className="text-xl font-bold" style={{ color: theme.colors.primary }}>
+                        ${product.price}
+                      </span>
+                      <div className="flex gap-2">
+                        <motion.button
+                          onClick={() => openEditModal(product)}
+                          className="p-2 rounded-lg"
+                          style={{ backgroundColor: theme.colors.primary + '20' }}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          <PencilIcon className="h-4 w-4" style={{ color: theme.colors.primary }} />
+                        </motion.button>
+                        <motion.button
+                          onClick={() => handleDeleteProduct(product.id)}
+                          className="p-2 rounded-lg"
+                          style={{ backgroundColor: theme.colors.error + '20' }}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          <TrashIcon className="h-4 w-4" style={{ color: theme.colors.error }} />
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </GlassPanel>
+        )}
       </div>
 
       {/* Add/Edit Modal */}
@@ -518,7 +518,7 @@ export const ProductsModern: React.FC = () => {
               }}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             />
-            
+
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -588,7 +588,7 @@ export const ProductsModern: React.FC = () => {
                         Price
                       </label>
                       <div className="relative">
-                        <CurrencyDollarIcon 
+                        <CurrencyDollarIcon
                           className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5"
                           style={{ color: theme.colors.textMuted }}
                         />
@@ -637,7 +637,7 @@ export const ProductsModern: React.FC = () => {
                       Image URL
                     </label>
                     <div className="relative">
-                      <PhotoIcon 
+                      <PhotoIcon
                         className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5"
                         style={{ color: theme.colors.textMuted }}
                       />

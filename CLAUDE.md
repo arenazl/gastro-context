@@ -72,6 +72,17 @@
 - **Accesibilidad**: WCAG 2.1 para inclusión
 - **PWA**: Service Workers para funcionalidad offline
 
+### 🎨 GUÍA DE ESTILO VISUAL (MANTENER CONSISTENCIA)
+- **Fondos principales**: bg-white o bg-gray-50 (NO gradientes llamativos)
+- **Headers de sección**: bg-white con shadow-sm y border-b
+- **Títulos**: text-gray-700 o text-gray-800, font-semibold o font-bold
+- **Inputs**: border-2 border-gray-200, rounded-xl, focus:ring-2 focus:ring-blue-500
+- **Botones primarios**: bg-blue-600 hover:bg-blue-700 text-white
+- **Botones secundarios**: border border-gray-300 hover:bg-gray-50
+- **Cards**: bg-white rounded-xl shadow-lg border border-gray-100
+- **NO USAR**: Gradientes extravagantes, colores neón, emojis en títulos
+- **Mantener**: Diseño limpio, profesional y minimalista
+
 ### 🏪 Reglas del Negocio Gastronómico (CRÍTICAS)
 - **Inventario**: Control de stock en tiempo real, alertas automáticas
 - **Pedidos**: Estados claros (pendiente → preparando → listo → entregado)
@@ -203,3 +214,117 @@ finally:
 - Un servidor bien programado NO necesita recuperación automática
 - Si falla, es un BUG que hay que arreglar, no enmascarar
 - NO crear loops de reinicio, health checks excesivos, o monitor scripts
+
+## 📝 CHANGELOG Y ESTADO ACTUAL DEL PROYECTO
+
+### 🔄 Sesión del 25/08/2025 - Corrección de Base de Datos y UI
+
+#### 1. **Reestructuración de Base de Datos** ✅
+**Problema identificado**: Inconsistencia entre frontend (múltiples direcciones) y backend (una dirección)
+
+**Solución implementada**:
+- Creada tabla `addresses` separada con relación 1:N con `customers`
+- Estructura de tablas:
+  ```sql
+  customers: id, first_name, last_name, dni, phone, email, notes, 
+            loyalty_points, total_visits, total_spent, is_active, 
+            created_at, updated_at
+  
+  addresses: id, customer_id, address_type, street_address, city,
+            state_province, postal_code, country, latitude, longitude,
+            is_default, delivery_instructions, formatted_address,
+            company_id, is_active, created_at, updated_at
+  ```
+
+#### 2. **Endpoints del Backend Actualizados** ✅
+Todos los endpoints funcionando con MySQL real:
+- `GET /api/customers` - Lista clientes
+- `POST /api/customers` - Crear cliente
+- `PUT /api/customers/{id}` - Actualizar cliente
+- `GET /api/customers/search?q=` - Buscar clientes
+- `GET /api/customers/{id}/addresses` - Direcciones del cliente
+- `POST /api/addresses` - Crear dirección
+- `PUT /api/addresses/{id}` - Actualizar dirección
+- `DELETE /api/addresses/{id}` - Eliminar dirección (soft delete)
+- `POST /api/setup/add-missing-columns` - Agregar columnas faltantes
+
+#### 3. **Gestión de Clientes Mejorada** ✅
+- **CustomersManagement.tsx**:
+  - Formularios inline (NO modales) en gestión normal
+  - Modal solo aparece en contexto de nueva orden
+  - Scroll arreglado en panel de clientes: `h-[calc(100vh-200px)]`
+  - Validación: mínimo 1 dirección antes de guardar cliente
+  - Integración con OpenStreetMap para geocoding
+  - ELIMINADO todo código de datos dummy/mock
+
+#### 4. **Pantalla Nueva Orden Mejorada** ✅
+- **NewOrderWithCache.tsx**:
+  - Panel de carrito con altura fija: `height: 'calc(100vh - 8rem)'`
+  - Botón "Procesar Orden" siempre visible al fondo
+  - Scroll mejorado en productos: `maxHeight: 'calc(100vh - 24rem)'`
+  - Grid de productos ajustado con gap más pequeño
+
+#### 5. **Localización** ✅
+- Menú "Custom" → "Clientes" en español
+- Todas las traducciones actualizadas en `es.json`
+
+### ⚠️ ESTADO ACTUAL Y PRÓXIMOS PASOS
+
+#### Base de Datos:
+- ✅ Esquema normalizado funcionando
+- ✅ Todas las columnas necesarias agregadas
+- ✅ Pool de conexiones MySQL estable (10 conexiones)
+- ✅ Sin fallback a datos mock - todo con BD real
+
+#### Frontend:
+- ✅ CustomersManagement integrado y funcionando
+- ✅ Scroll y layouts corregidos
+- ✅ Sin modales en gestión normal de clientes
+- ⚠️ Pendiente: Validación de direcciones antes de procesar orden
+
+#### Backend (`complete_server.py`):
+- ✅ Todos los endpoints CRUD funcionando
+- ✅ Métodos actualizados para nueva estructura
+- ✅ Manejo correcto del pool de conexiones
+- Puerto: **9002** (INMUTABLE)
+
+#### Scripts y Herramientas:
+- `add_missing_columns.sql` - Script para agregar columnas
+- `fix_customers_schema.sql` - Script para recrear tablas
+
+### 🎯 Para el Próximo Agente:
+
+1. **LEER PRIMERO**: Este archivo CLAUDE.md completo
+2. **VERIFICAR SERVICIOS**:
+   ```bash
+   # Backend debe estar en puerto 9002
+   curl http://172.29.228.80:9002/api/customers
+   
+   # Frontend debe estar en puerto 5173
+   curl http://172.29.228.80:5173
+   ```
+
+3. **ESTRUCTURA ACTUAL**:
+   - Backend: `/backend/complete_server.py` (NO crear otros servidores)
+   - Frontend: React + Vite en `/frontend`
+   - Base de datos: MySQL Aiven con tablas `customers` y `addresses`
+
+4. **REGLAS CRÍTICAS**:
+   - NUNCA cambiar puertos (9002 backend, 5173 frontend)
+   - NUNCA usar datos mock/dummy
+   - NUNCA crear modales en CustomersManagement (solo inline)
+   - SIEMPRE usar la IP de WSL, no localhost
+
+5. **TAREAS PENDIENTES**:
+   - [ ] Implementar validación de dirección en checkout
+   - [ ] Agregar mapa visual para selección de direcciones
+   - [ ] Implementar historial de pedidos por cliente
+   - [ ] Mejorar búsqueda de clientes con filtros avanzados
+   - [ ] Agregar exportación de clientes a Excel/CSV
+
+### 🔧 ARCHIVOS MODIFICADOS HOY:
+1. `/backend/complete_server.py` - Todos los endpoints de clientes/direcciones
+2. `/frontend/src/pages/CustomersManagement.tsx` - Gestión completa de clientes
+3. `/frontend/src/pages/NewOrderWithCache.tsx` - Arreglos de scroll y layout
+4. `/frontend/src/i18n/locales/es.json` - Traducciones
+5. `/backend/add_missing_columns.sql` - Script de migración

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel, AnimatedCard, FloatingButton, GradientText } from '../components/AnimatedComponents';
+import { toast } from 'react-toastify';
 import {
   ClockIcon,
   FireIcon,
@@ -13,567 +14,444 @@ import {
   ExclamationTriangleIcon,
   UserIcon,
   ArrowPathIcon,
-  SparklesIcon
+  SparklesIcon,
+  EyeIcon,
+  PlayIcon,
+  PauseIcon,
+  CheckCircleIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline';
 
-interface OrderItem {
+// Nuevas interfaces para la estructura mejorada
+interface KitchenItem {
   id: number;
+  item_id: number;
   name: string;
   quantity: number;
-  notes?: string;
-  status: 'pending' | 'preparing' | 'ready';
+  station: 'grill' | 'salads' | 'desserts' | 'drinks' | 'fryer' | 'general';
+  status: 'new' | 'viewed' | 'preparing' | 'delayed' | 'ready' | 'delivered';
+  special_instructions?: string;
+  waiting_minutes: number;
+  cooking_minutes: number;
+  estimated_minutes: number;
+  alert_color: 'green' | 'yellow' | 'red';
+  started_at?: string;
 }
 
-interface Order {
+interface KitchenOrder {
   id: number;
   table_number: number;
-  customer_name?: string;
-  items: OrderItem[];
-  status: 'pending' | 'preparing' | 'ready' | 'completed';
+  waiter: string;
+  priority: 'normal' | 'rush' | 'vip';
   created_at: string;
-  priority: 'normal' | 'high' | 'urgent';
-  time_elapsed: number;
-  waiter?: string;
+  items: KitchenItem[];
 }
+
+// Mapeo de estaciones a colores y nombres
+const stationConfig = {
+  grill: { name: 'Parrilla', color: '#EF4444', icon: FireIcon },
+  salads: { name: 'Ensaladas', color: '#10B981', icon: SparklesIcon },
+  desserts: { name: 'Postres', color: '#F59E0B', icon: SparklesIcon },
+  drinks: { name: 'Bebidas', color: '#3B82F6', icon: SparklesIcon },
+  fryer: { name: 'Freidora', color: '#8B5CF6', icon: FireIcon },
+  general: { name: 'General', color: '#6B7280', icon: SparklesIcon }
+};
+
+// Mapeo de estados a colores
+const statusConfig = {
+  new: { name: 'Nuevo', color: '#3B82F6', icon: BellIcon },
+  viewed: { name: 'Visto', color: '#8B5CF6', icon: EyeIcon },
+  preparing: { name: 'Preparando', color: '#F59E0B', icon: FireIcon },
+  delayed: { name: 'Demorado', color: '#EF4444', icon: ExclamationTriangleIcon },
+  ready: { name: 'Listo', color: '#10B981', icon: CheckCircleIcon },
+  delivered: { name: 'Entregado', color: '#6B7280', icon: TruckIcon }
+};
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 export const KitchenModern: React.FC = () => {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'preparing' | 'ready'>('all');
+  const [orders, setOrders] = useState<KitchenOrder[]>([]);
+  const [selectedStation, setSelectedStation] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => {
     loadOrders();
-    // Desactivado: actualizaciones automáticas cada 5 segundos
-    // const interval = setInterval(loadOrders, 5000);
-    // return () => clearInterval(interval);
-  }, []);
+    // Auto-refresh cada 10 segundos si está habilitado
+    const interval = autoRefresh ? setInterval(loadOrders, 10000) : null;
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [autoRefresh]);
 
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8003'}/api/orders/kitchen`);
+      const response = await fetch(`${API_URL}/api/orders/kitchen`);
       const data = await response.json();
       setOrders(data);
     } catch (error) {
       console.error('Error loading orders:', error);
-      // Mock data
-      setOrders([
-        {
-          id: 101,
-          table_number: 5,
-          customer_name: 'John Doe',
-          items: [
-            { id: 1, name: 'Caesar Salad', quantity: 2, status: 'preparing' },
-            { id: 2, name: 'Grilled Salmon', quantity: 1, status: 'pending', notes: 'No lemon' },
-            { id: 3, name: 'Tiramisu', quantity: 2, status: 'pending' }
-          ],
-          status: 'preparing',
-          created_at: '14:25',
-          priority: 'normal',
-          time_elapsed: 12,
-          waiter: 'Sarah'
-        },
-        {
-          id: 102,
-          table_number: 3,
-          customer_name: 'Jane Smith',
-          items: [
-            { id: 4, name: 'Ribeye Steak', quantity: 1, status: 'ready', notes: 'Medium rare' },
-            { id: 5, name: 'Mashed Potatoes', quantity: 1, status: 'ready' }
-          ],
-          status: 'ready',
-          created_at: '14:20',
-          priority: 'high',
-          time_elapsed: 17,
-          waiter: 'Mike'
-        },
-        {
-          id: 103,
-          table_number: 8,
-          items: [
-            { id: 6, name: 'Margherita Pizza', quantity: 2, status: 'pending' },
-            { id: 7, name: 'Garlic Bread', quantity: 1, status: 'pending' },
-            { id: 8, name: 'Coca Cola', quantity: 3, status: 'ready' }
-          ],
-          status: 'pending',
-          created_at: '14:30',
-          priority: 'urgent',
-          time_elapsed: 7,
-          waiter: 'Tom'
-        }
-      ]);
+      toast.error('Error cargando pedidos de cocina');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredOrders = filter === 'all' 
-    ? orders 
-    : orders.filter(order => order.status === filter);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return theme.colors.warning;
-      case 'preparing': return theme.colors.info;
-      case 'ready': return theme.colors.success;
-      case 'completed': return theme.colors.textMuted;
-      default: return theme.colors.textMuted;
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return theme.colors.error;
-      case 'high': return theme.colors.warning;
-      case 'normal': return theme.colors.primary;
-      default: return theme.colors.textMuted;
-    }
-  };
-
-  const getTimeColor = (minutes: number) => {
-    if (minutes > 30) return theme.colors.error;
-    if (minutes > 20) return theme.colors.warning;
-    return theme.colors.success;
-  };
-
-  const updateOrderStatus = async (orderId: number, newStatus: string) => {
+  // Actualizar estado de un item
+  const updateItemStatus = async (itemId: number, newStatus: string) => {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:8003'}/api/orders/${orderId}/status`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus })
-        }
-      );
-
+      const response = await fetch(`${API_URL}/api/kitchen/items/${itemId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
       if (response.ok) {
+        toast.success(`Estado actualizado a ${statusConfig[newStatus as keyof typeof statusConfig].name}`);
         loadOrders();
       }
     } catch (error) {
-      console.error('Error updating order status:', error);
+      toast.error('Error actualizando estado');
     }
   };
 
-  const updateItemStatus = async (orderId: number, itemId: number, newStatus: string) => {
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:8003'}/api/orders/${orderId}/items/${itemId}/status`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus })
-        }
-      );
+  // Filtrar órdenes por estación y estado
+  const filteredOrders = orders.filter(order => {
+    const hasMatchingItems = order.items.some(item => {
+      const stationMatch = selectedStation === 'all' || item.station === selectedStation;
+      const statusMatch = selectedStatus === 'all' || item.status === selectedStatus;
+      return stationMatch && statusMatch;
+    });
+    return hasMatchingItems;
+  });
 
-      if (response.ok) {
-        loadOrders();
-      }
-    } catch (error) {
-      console.error('Error updating item status:', error);
-    }
-  };
-
+  // Calcular estadísticas
   const stats = {
-    pending: orders.filter(o => o.status === 'pending').length,
-    preparing: orders.filter(o => o.status === 'preparing').length,
-    ready: orders.filter(o => o.status === 'ready').length,
-    avgTime: Math.round(orders.reduce((acc, o) => acc + o.time_elapsed, 0) / orders.length || 0)
+    pending: orders.reduce((acc, order) => 
+      acc + order.items.filter(item => item.status === 'new' || item.status === 'viewed').length, 0),
+    preparing: orders.reduce((acc, order) => 
+      acc + order.items.filter(item => item.status === 'preparing').length, 0),
+    ready: orders.reduce((acc, order) => 
+      acc + order.items.filter(item => item.status === 'ready').length, 0),
+    delayed: orders.reduce((acc, order) => 
+      acc + order.items.filter(item => item.status === 'delayed').length, 0)
   };
 
   return (
-    <div>
-      {/* Page Header with Actions */}
-      <PageHeader 
-        title={t('pages.kitchen.title')}
-        subtitle={`${stats.pending} pendientes • ${stats.preparing} preparando • ${stats.ready} listos`}
+    <div className="min-h-screen" style={{ backgroundColor: theme.colors.background }}>
+      <PageHeader
+        title="Cocina"
+        subtitle={`${filteredOrders.length} órdenes activas`}
         actions={[
+          {
+            label: autoRefresh ? 'Pausar' : 'Reanudar',
+            onClick: () => setAutoRefresh(!autoRefresh),
+            variant: autoRefresh ? 'secondary' : 'primary',
+            icon: autoRefresh ? PauseIcon : PlayIcon
+          },
           {
             label: 'Actualizar',
             onClick: loadOrders,
-            variant: 'primary',
-            icon: ArrowPathIcon
-          },
-          {
-            label: 'Alertas',
-            onClick: () => console.log('Ver alertas'),
             variant: 'secondary',
-            icon: BellIcon
+            icon: ArrowPathIcon
           }
         ]}
       />
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-        <AnimatedCard delay={0.1} className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm" style={{ color: theme.colors.textMuted }}>Pending</p>
-              <p className="text-2xl font-bold" style={{ color: theme.colors.warning }}>{stats.pending}</p>
+      <div className="p-6">
+        {/* Estadísticas rápidas */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <GlassPanel className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: theme.colors.textMuted }}>Pendientes</p>
+                <p className="text-2xl font-bold" style={{ color: '#3B82F6' }}>{stats.pending}</p>
+              </div>
+              <BellIcon className="h-8 w-8" style={{ color: '#3B82F6' }} />
             </div>
-            <ClockIcon className="h-8 w-8" style={{ color: theme.colors.warning }} />
-          </div>
-        </AnimatedCard>
+          </GlassPanel>
 
-        <AnimatedCard delay={0.2} className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm" style={{ color: theme.colors.textMuted }}>Preparing</p>
-              <p className="text-2xl font-bold" style={{ color: theme.colors.info }}>{stats.preparing}</p>
+          <GlassPanel className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: theme.colors.textMuted }}>Preparando</p>
+                <p className="text-2xl font-bold" style={{ color: '#F59E0B' }}>{stats.preparing}</p>
+              </div>
+              <FireIcon className="h-8 w-8" style={{ color: '#F59E0B' }} />
             </div>
-            <FireIcon className="h-8 w-8" style={{ color: theme.colors.info }} />
-          </div>
-        </AnimatedCard>
+          </GlassPanel>
 
-        <AnimatedCard delay={0.3} className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm" style={{ color: theme.colors.textMuted }}>Ready</p>
-              <p className="text-2xl font-bold" style={{ color: theme.colors.success }}>{stats.ready}</p>
+          <GlassPanel className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: theme.colors.textMuted }}>Listos</p>
+                <p className="text-2xl font-bold" style={{ color: '#10B981' }}>{stats.ready}</p>
+              </div>
+              <CheckCircleIcon className="h-8 w-8" style={{ color: '#10B981' }} />
             </div>
-            <CheckIcon className="h-8 w-8" style={{ color: theme.colors.success }} />
-          </div>
-        </AnimatedCard>
+          </GlassPanel>
 
-        <AnimatedCard delay={0.4} className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm" style={{ color: theme.colors.textMuted }}>Avg Time</p>
-              <p className="text-2xl font-bold" style={{ color: theme.colors.primary }}>{stats.avgTime}m</p>
+          <GlassPanel className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm" style={{ color: theme.colors.textMuted }}>Demorados</p>
+                <p className="text-2xl font-bold" style={{ color: '#EF4444' }}>{stats.delayed}</p>
+              </div>
+              <ExclamationTriangleIcon className="h-8 w-8" style={{ color: '#EF4444' }} />
             </div>
-            <ClockIcon className="h-8 w-8" style={{ color: theme.colors.primary }} />
-          </div>
-        </AnimatedCard>
-      </div>
-
-      {/* Filter Tabs */}
-      <GlassPanel delay={0.5} className="mt-6">
-        <div className="flex gap-2 mb-6">
-          {(['all', 'pending', 'preparing', 'ready'] as const).map((status) => (
-            <motion.button
-              key={status}
-              onClick={() => setFilter(status)}
-              className="px-4 py-2 rounded-lg font-medium capitalize transition-all"
-              style={{
-                backgroundColor: filter === status ? theme.colors.primary : theme.colors.surface,
-                color: filter === status ? 'white' : theme.colors.text
-              }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              {status}
-              {status !== 'all' && (
-                <span className="ml-2">
-                  ({orders.filter(o => o.status === status).length})
-                </span>
-              )}
-            </motion.button>
-          ))}
+          </GlassPanel>
         </div>
 
-        {/* Orders Grid */}
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <motion.div
-              className="h-12 w-12 border-4 rounded-full"
-              style={{
-                borderColor: theme.colors.primary + '20',
-                borderTopColor: theme.colors.primary
-              }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
+        {/* Filtros */}
+        <div className="flex gap-4 mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedStation('all')}
+              className={`px-4 py-2 rounded-lg ${selectedStation === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              Todas las estaciones
+            </button>
+            {Object.entries(stationConfig).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedStation(key)}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  selectedStation === key ? 'text-white' : 'text-gray-700'
+                }`}
+                style={{
+                  backgroundColor: selectedStation === key ? config.color : '#E5E7EB'
+                }}
+              >
+                <config.icon className="h-5 w-5" />
+                {config.name}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AnimatePresence>
-              {filteredOrders.map((order, index) => (
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedStatus('all')}
+              className={`px-4 py-2 rounded-lg ${selectedStatus === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              Todos
+            </button>
+            {Object.entries(statusConfig).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedStatus(key)}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  selectedStatus === key ? 'text-white' : 'text-gray-700'
+                }`}
+                style={{
+                  backgroundColor: selectedStatus === key ? config.color : '#E5E7EB'
+                }}
+              >
+                <config.icon className="h-4 w-4" />
+                {config.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Órdenes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <AnimatePresence>
+            {loading ? (
+              <div className="col-span-full flex justify-center items-center py-12">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <ArrowPathIcon className="h-8 w-8" style={{ color: theme.colors.primary }} />
+                </motion.div>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="col-span-full text-center py-12">
+                <p style={{ color: theme.colors.textMuted }}>No hay órdenes que coincidan con los filtros</p>
+              </div>
+            ) : (
+              filteredOrders.map((order, index) => (
                 <motion.div
                   key={order.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
                   transition={{ delay: index * 0.05 }}
-                  className="relative"
                 >
-                  <AnimatedCard
-                    className="p-4 cursor-pointer"
-                    whileHover={{ y: -5 }}
-                    onClick={() => setSelectedOrder(order)}
-                  >
-                    {/* Priority Border */}
-                    <div 
-                      className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
-                      style={{ backgroundColor: getPriorityColor(order.priority) }}
-                    />
-                    
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-3 pl-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold" style={{ color: theme.colors.text }}>
-                            Table {order.table_number}
-                          </span>
-                          <span
-                            className="px-2 py-1 rounded-full text-xs font-medium"
-                            style={{
-                              backgroundColor: getStatusColor(order.status) + '20',
-                              color: getStatusColor(order.status)
-                            }}
-                          >
-                            {order.status}
-                          </span>
-                        </div>
-                        {order.customer_name && (
-                          <p className="text-sm mt-1" style={{ color: theme.colors.textMuted }}>
-                            {order.customer_name}
-                          </p>
-                        )}
-                      </div>
-                      <motion.div
-                        className="text-right"
-                        animate={{
-                          color: getTimeColor(order.time_elapsed)
-                        }}
-                      >
-                        <p className="text-lg font-bold">{order.time_elapsed}m</p>
-                        <p className="text-xs" style={{ color: theme.colors.textMuted }}>
-                          {order.created_at}
-                        </p>
-                      </motion.div>
-                    </div>
-
-                    {/* Items */}
-                    <div className="space-y-3 mb-3">
-                      {order.items.slice(0, 3).map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between p-2 rounded"
-                          style={{ backgroundColor: theme.colors.surface }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: getStatusColor(item.status) }}
-                            />
-                            <span className="text-sm" style={{ color: theme.colors.text }}>
-                              {item.quantity}x {item.name}
-                            </span>
+                  <GlassPanel className="h-full">
+                    {/* Header de la orden */}
+                    <div className="p-4 border-b" style={{ borderColor: theme.colors.border }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className="text-lg font-bold" style={{ color: theme.colors.text }}>
+                            Mesa {order.table_number}
                           </div>
-                          {item.notes && (
-                            <ExclamationTriangleIcon
-                              className="h-4 w-4"
-                              style={{ color: theme.colors.warning }}
-                            />
+                          {order.priority === 'vip' && (
+                            <span className="px-2 py-1 rounded-full text-xs bg-purple-600 text-white">
+                              VIP
+                            </span>
+                          )}
+                          {order.priority === 'rush' && (
+                            <span className="px-2 py-1 rounded-full text-xs bg-red-600 text-white">
+                              URGENTE
+                            </span>
                           )}
                         </div>
-                      ))}
-                      {order.items.length > 3 && (
-                        <p className="text-sm text-center" style={{ color: theme.colors.textMuted }}>
-                          +{order.items.length - 3} more items
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: theme.colors.border }}>
-                      <div className="flex items-center gap-2">
-                        <UserIcon className="h-4 w-4" style={{ color: theme.colors.textMuted }} />
-                        <span className="text-sm" style={{ color: theme.colors.textMuted }}>
-                          {order.waiter}
-                        </span>
-                      </div>
-                      {order.priority === 'urgent' && (
-                        <motion.div
-                          animate={{ scale: [1, 1.2, 1] }}
-                          transition={{ duration: 1, repeat: Infinity }}
-                        >
-                          <ExclamationTriangleIcon
-                            className="h-5 w-5"
-                            style={{ color: theme.colors.error }}
-                          />
-                        </motion.div>
-                      )}
-                    </div>
-                  </AnimatedCard>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-      </GlassPanel>
-
-      {/* Order Details Modal */}
-      <AnimatePresence>
-        {selectedOrder && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedOrder(null)}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-            />
-            
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
-            >
-              <GlassPanel>
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold" style={{ color: theme.colors.text }}>
-                      Order #{selectedOrder.id} - Table {selectedOrder.table_number}
-                    </h2>
-                    <p className="text-sm mt-1" style={{ color: theme.colors.textMuted }}>
-                      {selectedOrder.customer_name || 'Walk-in Customer'}
-                    </p>
-                  </div>
-                  <motion.button
-                    onClick={() => setSelectedOrder(null)}
-                    className="p-2 rounded-lg"
-                    style={{ backgroundColor: theme.colors.surface }}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    <XMarkIcon className="h-5 w-5" style={{ color: theme.colors.textMuted }} />
-                  </motion.button>
-                </div>
-
-                {/* Order Info */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="p-3 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                    <p className="text-xs" style={{ color: theme.colors.textMuted }}>Status</p>
-                    <p
-                      className="text-sm font-medium mt-1"
-                      style={{ color: getStatusColor(selectedOrder.status) }}
-                    >
-                      {selectedOrder.status}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                    <p className="text-xs" style={{ color: theme.colors.textMuted }}>Priority</p>
-                    <p
-                      className="text-sm font-medium mt-1"
-                      style={{ color: getPriorityColor(selectedOrder.priority) }}
-                    >
-                      {selectedOrder.priority}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                    <p className="text-xs" style={{ color: theme.colors.textMuted }}>Time</p>
-                    <p
-                      className="text-sm font-medium mt-1"
-                      style={{ color: getTimeColor(selectedOrder.time_elapsed) }}
-                    >
-                      {selectedOrder.time_elapsed} minutes
-                    </p>
-                  </div>
-                </div>
-
-                {/* Items List */}
-                <div className="space-y-3 mb-6">
-                  <h3 className="font-medium" style={{ color: theme.colors.text }}>Order Items</h3>
-                  {selectedOrder.items.map((item, index) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="flex items-center justify-between p-3 rounded-lg"
-                      style={{ backgroundColor: theme.colors.surface }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getStatusColor(item.status) }}
-                        />
-                        <div>
-                          <p className="font-medium" style={{ color: theme.colors.text }}>
-                            {item.quantity}x {item.name}
-                          </p>
-                          {item.notes && (
-                            <p className="text-sm" style={{ color: theme.colors.warning }}>
-                              Note: {item.notes}
-                            </p>
-                          )}
+                        <div className="text-sm" style={{ color: theme.colors.textMuted }}>
+                          #{order.id}
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        {item.status !== 'ready' && (
-                          <motion.button
-                            onClick={() => updateItemStatus(selectedOrder.id, item.id, 
-                              item.status === 'pending' ? 'preparing' : 'ready'
-                            )}
-                            className="px-3 py-1 rounded-lg text-sm font-medium"
+                      <div className="flex items-center gap-2 text-sm" style={{ color: theme.colors.textMuted }}>
+                        <UserIcon className="h-4 w-4" />
+                        {order.waiter}
+                        <ClockIcon className="h-4 w-4 ml-2" />
+                        {new Date(order.created_at).toLocaleTimeString('es-AR', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Items de la orden */}
+                    <div className="p-4 space-y-3">
+                      {order.items.map(item => {
+                        const station = stationConfig[item.station];
+                        const status = statusConfig[item.status];
+                        const StatusIcon = status.icon;
+                        
+                        return (
+                          <motion.div
+                            key={item.id}
+                            className="p-3 rounded-lg border"
                             style={{
-                              backgroundColor: theme.colors.primary,
-                              color: 'white'
+                              borderColor: item.alert_color === 'red' ? '#EF4444' : 
+                                         item.alert_color === 'yellow' ? '#F59E0B' : 
+                                         theme.colors.border,
+                              backgroundColor: item.alert_color === 'red' ? '#FEF2F2' :
+                                             item.alert_color === 'yellow' ? '#FFFBEB' :
+                                             theme.colors.surface
                             }}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ scale: 1.02 }}
                           >
-                            {item.status === 'pending' ? 'Start' : 'Ready'}
-                          </motion.button>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-medium" style={{ color: theme.colors.text }}>
+                                    {item.quantity}x {item.name}
+                                  </span>
+                                  <span 
+                                    className="px-2 py-0.5 rounded-full text-xs"
+                                    style={{ 
+                                      backgroundColor: station.color + '20',
+                                      color: station.color
+                                    }}
+                                  >
+                                    {station.name}
+                                  </span>
+                                </div>
+                                {item.special_instructions && (
+                                  <p className="text-sm italic" style={{ color: theme.colors.textMuted }}>
+                                    📝 {item.special_instructions}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <StatusIcon className="h-5 w-5" style={{ color: status.color }} />
+                                <span className="text-sm font-medium" style={{ color: status.color }}>
+                                  {status.name}
+                                </span>
+                              </div>
+                            </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  {selectedOrder.status === 'pending' && (
-                    <FloatingButton
-                      onClick={() => {
-                        updateOrderStatus(selectedOrder.id, 'preparing');
-                        setSelectedOrder(null);
-                      }}
-                      variant="primary"
-                      className="flex-1"
-                    >
-                      <FireIcon className="h-5 w-5 mr-2" />
-                      Start Preparing
-                    </FloatingButton>
-                  )}
-                  {selectedOrder.status === 'preparing' && (
-                    <FloatingButton
-                      onClick={() => {
-                        updateOrderStatus(selectedOrder.id, 'ready');
-                        setSelectedOrder(null);
-                      }}
-                      variant="primary"
-                      className="flex-1"
-                    >
-                      <CheckIcon className="h-5 w-5 mr-2" />
-                      Mark as Ready
-                    </FloatingButton>
-                  )}
-                  {selectedOrder.status === 'ready' && (
-                    <FloatingButton
-                      onClick={() => {
-                        updateOrderStatus(selectedOrder.id, 'completed');
-                        setSelectedOrder(null);
-                      }}
-                      variant="secondary"
-                      className="flex-1"
-                    >
-                      <SparklesIcon className="h-5 w-5 mr-2" />
-                      Complete Order
-                    </FloatingButton>
-                  )}
-                </div>
-              </GlassPanel>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+                            {/* Tiempos */}
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex gap-3">
+                                <span style={{ color: theme.colors.textMuted }}>
+                                  ⏱️ Esperando: {item.waiting_minutes}min
+                                </span>
+                                {item.cooking_minutes > 0 && (
+                                  <span style={{ color: theme.colors.textMuted }}>
+                                    🔥 Cocinando: {item.cooking_minutes}min
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ color: theme.colors.textMuted }}>
+                                Est: {item.estimated_minutes}min
+                              </span>
+                            </div>
+
+                            {/* Botones de acción */}
+                            <div className="flex gap-2 mt-3">
+                              {item.status === 'new' && (
+                                <button
+                                  onClick={() => updateItemStatus(item.id, 'viewed')}
+                                  className="flex-1 px-3 py-1 rounded bg-purple-600 text-white text-sm hover:bg-purple-700"
+                                >
+                                  <EyeIcon className="h-4 w-4 inline mr-1" />
+                                  Marcar como visto
+                                </button>
+                              )}
+                              {item.status === 'viewed' && (
+                                <button
+                                  onClick={() => updateItemStatus(item.id, 'preparing')}
+                                  className="flex-1 px-3 py-1 rounded bg-orange-600 text-white text-sm hover:bg-orange-700"
+                                >
+                                  <PlayIcon className="h-4 w-4 inline mr-1" />
+                                  Empezar preparación
+                                </button>
+                              )}
+                              {item.status === 'preparing' && (
+                                <>
+                                  <button
+                                    onClick={() => updateItemStatus(item.id, 'delayed')}
+                                    className="flex-1 px-3 py-1 rounded bg-red-600 text-white text-sm hover:bg-red-700"
+                                  >
+                                    <PauseIcon className="h-4 w-4 inline mr-1" />
+                                    Demorar
+                                  </button>
+                                  <button
+                                    onClick={() => updateItemStatus(item.id, 'ready')}
+                                    className="flex-1 px-3 py-1 rounded bg-green-600 text-white text-sm hover:bg-green-700"
+                                  >
+                                    <CheckIcon className="h-4 w-4 inline mr-1" />
+                                    Listo
+                                  </button>
+                                </>
+                              )}
+                              {item.status === 'delayed' && (
+                                <button
+                                  onClick={() => updateItemStatus(item.id, 'preparing')}
+                                  className="flex-1 px-3 py-1 rounded bg-orange-600 text-white text-sm hover:bg-orange-700"
+                                >
+                                  <PlayIcon className="h-4 w-4 inline mr-1" />
+                                  Reanudar
+                                </button>
+                              )}
+                              {item.status === 'ready' && (
+                                <button
+                                  onClick={() => updateItemStatus(item.id, 'delivered')}
+                                  className="flex-1 px-3 py-1 rounded bg-gray-600 text-white text-sm hover:bg-gray-700"
+                                >
+                                  <TruckIcon className="h-4 w-4 inline mr-1" />
+                                  Entregar
+                                </button>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </GlassPanel>
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 };

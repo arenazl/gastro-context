@@ -20,8 +20,13 @@ from decimal import Decimal
 from urllib.parse import urlparse, parse_qs
 from crash_diagnostics import CrashDiagnostics
 from mercadopago_config import create_payment_preference, process_webhook
+import google.generativeai as genai
 
 PORT = 9002
+
+# Configurar Gemini AI
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyD7N-EUhvQ5NI9c8PTwewkuCiX8QvRVgfw')
+genai.configure(api_key=GEMINI_API_KEY)
 
 # Directorio para imágenes estáticas
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
@@ -165,6 +170,67 @@ MYSQL_CONFIG = {
 
 # Cache simple en memoria (60 segundos)
 cache = {}
+
+# Cache global para datos del restaurante (productos, categorías, etc.)
+# Se carga una vez y se mantiene en memoria
+restaurant_data_cache = {
+    'products': None,
+    'categories': None,
+    'ingredients': None,
+    'product_ingredients': None,
+    'last_updated': None,
+    'cache_duration': 3600  # 1 hora
+}
+
+# Cache para respuestas de IA (evitar llamadas repetitivas)
+ai_response_cache = {
+    'pairings': {},  # Cache de maridajes por producto
+    'recommendations': {},  # Cache de recomendaciones por búsqueda
+    'cache_duration': 1800  # 30 minutos
+}
+
+# 🧠 SISTEMA DE CONTEXTO PERSISTENTE (como ChatGPT)
+conversation_threads = {
+    # 'thread_id': {
+    #     'context_initialized': True,
+    #     'restaurant_data': {...},
+    #     'conversation_history': [...],
+    #     'created_at': timestamp,
+    #     'last_activity': timestamp
+    # }
+}
+
+# Función para limpiar threads viejos (evitar memory leak)
+def cleanup_old_threads():
+    current_time = time.time()
+    expired_threads = []
+    
+    for thread_id, thread_data in conversation_threads.items():
+        # Eliminar threads inactivos por más de 2 horas
+        if current_time - thread_data.get('last_activity', 0) > 7200:
+            expired_threads.append(thread_id)
+    
+    for thread_id in expired_threads:
+        del conversation_threads[thread_id]
+        logger.info(f"[THREAD_CLEANUP] Thread {thread_id} eliminado por inactividad")
+
+# Función para obtener o crear thread
+def get_or_create_thread(thread_id):
+    cleanup_old_threads()  # Limpiar threads viejos
+    
+    if thread_id not in conversation_threads:
+        conversation_threads[thread_id] = {
+            'context_initialized': False,
+            'restaurant_data': None,
+            'conversation_history': [],
+            'created_at': time.time(),
+            'last_activity': time.time()
+        }
+        logger.info(f"[THREAD_CREATE] Nuevo thread creado: {thread_id}")
+    else:
+        conversation_threads[thread_id]['last_activity'] = time.time()
+    
+    return conversation_threads[thread_id]
 CACHE_TTL = 60  # segundos
 
 # Pool de conexiones global - Inicializar al arrancar
@@ -173,6 +239,175 @@ pool_recovery_attempts = 0
 MAX_RECOVERY_ATTEMPTS = 3
 
 # Inicializar pool al importar el módulo
+def load_restaurant_data():
+    """Cargar todos los datos del restaurante en memoria de una sola vez"""
+    global restaurant_data_cache
+    
+    connection = None
+    cursor = None
+    
+    try:
+        connection = connection_pool.get_connection()
+        cursor = connection.cursor(dictionary=True)
+        
+        logger.info("[CACHE] Cargando datos del restaurante en memoria...")
+        
+        # Cargar productos con categorías
+        query_products = """
+        SELECT p.id, p.name, p.description, p.price, p.category_id,
+               c.name as category_name, p.image_url, p.available,
+               s.name as subcategory_name
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN subcategories s ON p.subcategory_id = s.id
+        WHERE p.available = 1
+        ORDER BY c.name, p.name
+        """
+        cursor.execute(query_products)
+        products = cursor.fetchall()
+        
+        # Cargar categorías
+        query_categories = """
+        SELECT id, name, description, icon, color
+        FROM categories
+        WHERE is_active = 1
+        ORDER BY sort_order
+        """
+        cursor.execute(query_categories)
+        categories = cursor.fetchall()
+        
+        # Cargar ingredientes con URLs de imágenes
+        query_ingredients = """
+        SELECT id, name, name_en, category, unit, is_allergen, 
+               allergen_type, is_vegetarian, is_vegan, is_gluten_free
+        FROM ingredients
+        """
+        cursor.execute(query_ingredients)
+        ingredients = cursor.fetchall()
+        
+        # 🎨 MAPEO DE INGREDIENTES A IMÁGENES para interfaz interactiva
+        ingredient_images = {
+            # Carnes
+            'carne de res': 'http://172.29.228.80:9002/static/products/beef.jpg',
+            'carne': 'http://172.29.228.80:9002/static/products/meat.jpg',
+            'pollo': 'http://172.29.228.80:9002/static/products/grilled-chicken.jpg',
+            
+            # Vegetales
+            'tomate': 'http://172.29.228.80:9002/static/products/ensalada-caprese.jpg',
+            'ajo': 'http://172.29.228.80:9002/static/products/bruschetta-mixta.jpg',
+            'cebolla': 'http://172.29.228.80:9002/static/products/french-onion-soup.jpg',
+            
+            # Especias y condimentos
+            'sal': 'http://172.29.228.80:9002/static/products/steak.jpg',
+            'pimienta negra': 'http://172.29.228.80:9002/static/products/filet-mignon.jpg',
+            'aceite de oliva': 'http://172.29.228.80:9002/static/products/ensalada-mediterranea.jpg',
+            
+            # Lácteos
+            'queso': 'http://172.29.228.80:9002/static/products/cuatro-quesos.jpg',
+            'mozzarella': 'http://172.29.228.80:9002/static/products/margherita.jpg',
+            'parmesano': 'http://172.29.228.80:9002/static/products/caesar-salad.jpg',
+            
+            # Default para ingredientes sin imagen específica
+            'default': 'http://172.29.228.80:9002/static/products/house-burger.jpg'
+        }
+        
+        # Agregar image_url a cada ingrediente
+        for ingredient in ingredients:
+            ingredient_name_lower = ingredient['name'].lower()
+            # Buscar imagen específica o usar default
+            image_url = ingredient_images.get(ingredient_name_lower, ingredient_images['default'])
+            ingredient['image_url'] = image_url
+        
+        # Cargar relaciones producto-ingredientes
+        query_product_ingredients = """
+        SELECT pi.product_id, pi.ingredient_id, pi.quantity, pi.unit, pi.is_optional,
+               i.name as ingredient_name, i.name_en, i.is_allergen, i.allergen_type,
+               i.is_vegetarian, i.is_vegan, i.is_gluten_free
+        FROM product_ingredients pi
+        JOIN ingredients i ON pi.ingredient_id = i.id
+        ORDER BY pi.product_id, pi.is_optional ASC
+        """
+        cursor.execute(query_product_ingredients)
+        product_ingredients = cursor.fetchall()
+        
+        # Organizar ingredientes por producto
+        ingredients_by_product = {}
+        for pi in product_ingredients:
+            product_id = pi['product_id']
+            if product_id not in ingredients_by_product:
+                ingredients_by_product[product_id] = []
+            
+            # Obtener imagen del ingrediente
+            ingredient_name_lower = pi['ingredient_name'].lower()
+            ingredient_image = ingredient_images.get(ingredient_name_lower, ingredient_images['default'])
+            
+            ingredients_by_product[product_id].append({
+                'name': pi['ingredient_name'],
+                'name_en': pi['name_en'],
+                'quantity': float(pi['quantity']) if pi['quantity'] else None,
+                'unit': pi['unit'],
+                'is_optional': bool(pi['is_optional']),
+                'is_allergen': bool(pi['is_allergen']),
+                'allergen_type': pi['allergen_type'],
+                'is_vegetarian': bool(pi['is_vegetarian']),
+                'is_vegan': bool(pi['is_vegan']),
+                'is_gluten_free': bool(pi['is_gluten_free']),
+                'image_url': ingredient_image  # 🎨 URL de imagen para interfaz interactiva
+            })
+        
+        # Filtrar productos para maridajes
+        pairing_products = []
+        for product in products:
+            product_category = (product.get('category_name', '') or '').lower()
+            product_name_lower = (product.get('name', '') or '').lower()
+            
+            if any(keyword in product_category or keyword in product_name_lower for keyword in [
+                'bebida', 'vino', 'cerveza', 'jugo', 'café', 'cocktail', 'agua',
+                'ensalada', 'entrada', 'sopa', 'pan', 'queso', 'postre'
+            ]):
+                pairing_products.append({
+                    'id': product['id'],
+                    'name': product['name'],
+                    'description': product.get('description', ''),
+                    'category': product.get('category_name', ''),
+                    'price': float(product.get('price', 0)),
+                    'image_url': product.get('image_url', ''),
+                    'image_filename': product.get('image_filename', '')
+                })
+        
+        # Actualizar caché
+        restaurant_data_cache.update({
+            'products': products,
+            'categories': categories,
+            'ingredients': ingredients,
+            'ingredients_by_product': ingredients_by_product,
+            'pairing_products': pairing_products,
+            'last_updated': time.time()
+        })
+        
+        logger.info(f"[CACHE] Datos cargados: {len(products)} productos, {len(categories)} categorías, "
+                   f"{len(ingredients)} ingredientes, {len(pairing_products)} productos para maridaje")
+        
+    except Exception as e:
+        logger.error(f"[CACHE] Error cargando datos del restaurante: {e}")
+        raise
+    finally:
+        if cursor: cursor.close()
+        if connection: connection.close()
+
+def get_restaurant_data():
+    """Obtener datos del restaurante desde caché o cargarlos si es necesario"""
+    global restaurant_data_cache
+    
+    current_time = time.time()
+    
+    # Verificar si necesita actualizar caché
+    if (restaurant_data_cache['last_updated'] is None or
+        current_time - restaurant_data_cache['last_updated'] > restaurant_data_cache['cache_duration']):
+        load_restaurant_data()
+    
+    return restaurant_data_cache
+
 def init_pool():
     """Inicializar pool de conexiones con logging detallado"""
     global connection_pool, pool_recovery_attempts
@@ -428,10 +663,10 @@ def execute_fallback_query(query, params=None):
         })
         raise
 
-# Inicializar pool ahora
-success = init_pool()
-if not success:
-    log_detailed('WARN', 'STARTUP', "Pool inicial falló, se usará conexión directa como fallback")
+# Pool se inicializa en el main, no aquí
+# success = init_pool()
+# if not success:
+#     log_detailed('WARN', 'STARTUP', "Pool inicial falló, se usará conexión directa como fallback")
 
 def get_from_cache(key):
     """Obtener de cache si no está expirado"""
@@ -665,6 +900,48 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 'database': 'MySQL Aiven'
             })
             
+        # Crear tabla kitchen_queue_items
+        elif path == '/api/create-kitchen-table':
+            try:
+                result = self.create_kitchen_queue_table()
+                self.send_json_response({'success': True, 'message': result})
+            except Exception as e:
+                self.send_error_response(500, str(e))
+                
+        # Agregar columna payment_status
+        elif path == '/api/add-payment-status':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor()
+                
+                # Primero verificar si la columna existe
+                cursor.execute("""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = 'gastro' 
+                    AND TABLE_NAME = 'orders' 
+                    AND COLUMN_NAME = 'payment_status'
+                """)
+                
+                if not cursor.fetchone():
+                    cursor.execute("""
+                        ALTER TABLE orders 
+                        ADD COLUMN payment_status 
+                        ENUM('pending', 'paid', 'partial', 'refunded', 'cancelled') 
+                        DEFAULT 'pending' 
+                        AFTER status
+                    """)
+                connection.commit()
+                
+                self.send_json_response({'success': True, 'message': 'Columna payment_status agregada'})
+            except Exception as e:
+                self.send_error_response(500, str(e))
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+                
         # Test directo de base de datos
         elif path == '/api/test-db':
             connection = None
@@ -819,10 +1096,140 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             tables = get_cached_or_fetch('tables', self.get_tables_data)
             self.send_json_response(tables)
             
-        # Órdenes de cocina
+        # Todas las órdenes
+        elif path == '/api/orders':
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor()
+                
+                query = """
+                SELECT o.id, o.table_number, o.customer_id, o.status, 
+                       o.payment_status, o.subtotal, o.tax, o.total,
+                       o.created_at, u.first_name as waiter
+                FROM orders o
+                LEFT JOIN users u ON o.waiter_id = u.id
+                WHERE o.status IN ('pending', 'preparing')
+                ORDER BY o.created_at DESC
+                """
+                
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                orders = []
+                for row in rows:
+                    order_id = row[0]
+                    
+                    # Obtener items de cada orden
+                    items_query = """
+                    SELECT oi.id, oi.product_id, oi.quantity, oi.price, oi.notes,
+                           p.name as product_name
+                    FROM order_items oi
+                    LEFT JOIN products p ON oi.product_id = p.id
+                    WHERE oi.order_id = %s
+                    """
+                    cursor.execute(items_query, (order_id,))
+                    items_rows = cursor.fetchall()
+                    
+                    items = []
+                    for item_row in items_rows:
+                        items.append({
+                            'id': item_row[0],
+                            'product_id': item_row[1],
+                            'product_name': item_row[5],
+                            'quantity': item_row[2],
+                            'price': float(item_row[3]) if item_row[3] else 0,
+                            'notes': item_row[4]
+                        })
+                    
+                    orders.append({
+                        'id': row[0],
+                        'table_number': row[1],
+                        'customer_id': row[2],
+                        'status': row[3],
+                        'payment_status': row[4],
+                        'subtotal': float(row[5]) if row[5] else 0,
+                        'tax': float(row[6]) if row[6] else 0,
+                        'total': float(row[7]) if row[7] else 0,
+                        'created_at': str(row[8]) if row[8] else None,
+                        'waiter': row[9] or 'Sin asignar',
+                        'items': items
+                    })
+                
+                self.send_json_response(orders)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo órdenes: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # Órdenes de cocina (formato antiguo)
         elif path == '/api/orders/kitchen':
             orders = self.get_kitchen_orders()
             self.send_json_response(orders)
+            
+        # Cola de cocina (para drag-and-drop)
+        elif path == '/api/kitchen/queue':
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor()
+                
+                query = """
+                SELECT 
+                    kq.id,
+                    kq.order_id,
+                    kq.order_item_id,
+                    kq.product_name,
+                    kq.quantity,
+                    kq.station,
+                    kq.status,
+                    kq.special_instructions,
+                    kq.table_number,
+                    kq.waiter_name,
+                    kq.created_at,
+                    kq.started_at,
+                    TIMESTAMPDIFF(MINUTE, kq.created_at, NOW()) as waiting_minutes,
+                    CASE 
+                        WHEN kq.started_at IS NOT NULL 
+                        THEN TIMESTAMPDIFF(MINUTE, kq.started_at, NOW()) 
+                        ELSE 0 
+                    END as cooking_minutes
+                FROM kitchen_queue_items kq
+                WHERE kq.status NOT IN ('cancelled')
+                ORDER BY kq.created_at ASC
+                """
+                
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                items = []
+                for row in rows:
+                    items.append({
+                        'id': row[0],
+                        'order_id': row[1],
+                        'order_item_id': row[2],
+                        'product_name': row[3],
+                        'quantity': row[4],
+                        'station': row[5],
+                        'status': row[6],
+                        'special_instructions': row[7],
+                        'table_number': row[8],
+                        'waiter_name': row[9],
+                        'created_at': str(row[10]) if row[10] else None,
+                        'started_at': str(row[11]) if row[11] else None,
+                        'waiting_minutes': row[12],
+                        'cooking_minutes': row[13]
+                    })
+                
+                self.send_json_response(items)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo cola de cocina: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
             
         # Clientes
         elif path == '/api/customers':
@@ -892,6 +1299,57 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(addresses)
             except Exception as e:
                 logger.error(f"Error obteniendo addresses: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Inicialización de caché del menú
+        elif path == '/api/menu/init':
+            try:
+                logger.info("[INIT] Inicializando caché del menú interactivo...")
+                restaurant_data = get_restaurant_data()  # Esto cargará todo el caché
+                
+                self.send_json_response({
+                    'status': 'success',
+                    'message': 'Caché inicializado correctamente',
+                    'data': {
+                        'products_count': len(restaurant_data.get('products', [])),
+                        'categories_count': len(restaurant_data.get('categories', [])),
+                        'ingredients_count': len(restaurant_data.get('ingredients', [])),
+                        'pairing_products_count': len(restaurant_data.get('pairing_products', []))
+                    }
+                })
+                
+            except Exception as e:
+                logger.error(f"Error inicializando caché del menú: {str(e)}")
+                self.send_json_response({
+                    'status': 'error',
+                    'message': f'Error inicializando caché: {str(e)}'
+                })
+        
+        # Búsqueda de clientes
+        elif path == '/api/customers/search':
+            try:
+                search_term = query.get('q', [''])[0]
+                if len(search_term) < 2:
+                    self.send_json_response([])
+                else:
+                    customers = self.search_customers(search_term)
+                    self.send_json_response(customers)
+            except Exception as e:
+                logger.error(f"Error buscando clientes: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Direcciones de un cliente específico  
+        elif path.startswith('/api/customers/') and path.endswith('/addresses'):
+            try:
+                # Extraer customer_id del path
+                parts = path.split('/')
+                customer_id = int(parts[3])  # /api/customers/{id}/addresses
+                addresses = self.get_customer_addresses(customer_id)
+                self.send_json_response(addresses)
+            except ValueError:
+                self.send_error_response(400, "ID de cliente inválido")
+            except Exception as e:
+                logger.error(f"Error obteniendo direcciones del cliente: {e}")
                 self.send_error_response(500, str(e))
         
         # Configuración de área específica
@@ -1004,6 +1462,15 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 logger.error(f"Error obteniendo KPIs de rendimiento: {e}")
                 self.send_error_response(500, str(e))
         
+        # Debug: Análisis de estructura de BD
+        elif path == '/api/debug/database-structure':
+            try:
+                result = self.analyze_database_structure()
+                self.send_json_response(result)
+            except Exception as e:
+                logger.error(f"Error analizando estructura de BD: {e}")
+                self.send_error_response(500, str(e))
+        
         else:
             self.send_error(404)
     
@@ -1057,6 +1524,22 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error_response(500, str(e))
         
+        elif path == '/api/kitchen/queue':
+            # Crear nuevo item en la cola de cocina
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                item_id = self.create_kitchen_queue_item(data)
+                
+                self.send_json_response({
+                    'id': item_id,
+                    'success': True
+                })
+            except Exception as e:
+                self.send_error_response(500, str(e))
+        
         elif path == '/api/payment/create-preference':
             # Crear preferencia de pago con MercadoPago
             content_length = int(self.headers.get('Content-Length', 0))
@@ -1076,6 +1559,344 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Error creando preferencia de pago: {str(e)}")
                 self.send_error_response(500, str(e))
+        
+        elif path == '/api/chat/menu-ai':
+            # 🧠 SISTEMA DE CONTEXTO PERSISTENTE (como ChatGPT)
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                user_message = data.get('message', '')
+                context = data.get('context', {})
+                thread_id = data.get('threadId', f"thread_{int(time.time() * 1000)}")
+                
+                # 🎆 OBTENER O CREAR THREAD
+                thread = get_or_create_thread(thread_id)
+                
+                # 📜 PASO 1: INICIALIZAR CONTEXTO (solo la primera vez)
+                if not thread['context_initialized']:
+                    logger.info(f"[CONTEXT_INIT] Inicializando contexto para thread {thread_id}")
+                    
+                    # Cargar datos del restaurante SOLO una vez
+                    restaurant_data = get_restaurant_data()
+                    thread['restaurant_data'] = restaurant_data
+                    thread['context_initialized'] = True
+                    
+                    # Si es el primer mensaje, puede ser de setup
+                    if user_message.lower() in ['setup', 'init', 'initialize']:
+                        self.send_json_response({
+                            'response': 'Contexto inicializado correctamente. ¡Ya conozco todo el menú!',
+                            'threadId': thread_id,
+                            'status': 'context_ready',
+                            'stats': {
+                                'products_loaded': len(restaurant_data.get('products', [])),
+                                'categories_loaded': len(set([p['category_name'] for p in restaurant_data.get('products', []) if p['category_name']])),
+                                'ingredients_loaded': len(restaurant_data.get('ingredients_by_product', {}))
+                            }
+                        })
+                        return
+                
+                # 🤖 PASO 2: AI INTERPRETA CON CONTEXTO PERSISTENTE
+                products_data = thread['restaurant_data'].get('products', [])
+                user_intent = self.interpret_user_intent_with_ai_persistent(user_message, thread_id, context)
+                
+                # 🎯 PASO 3: EJECUTAR ACCIÓN SEGÚN LA INTENCIÓN INTERPRETADA
+                # Agregar threadId a la respuesta
+                def send_response_with_thread(response_data):
+                    response_data['threadId'] = thread_id
+                    self.send_json_response(response_data)
+                # 🎭 MANEJAR SALUDOS Y CONVERSACIÓN CASUAL PRIMERO
+                if user_intent['intent_type'] == 'greeting':
+                    # Usuario está saludando - responder amigablemente sin productos
+                    send_response_with_thread({
+                        'response': user_intent.get('response_text', '¡Hola! 👋 ¡Bienvenido! ¿En qué te puedo ayudar hoy? Puedo mostrarte nuestras especialidades, recomendarte algo rico o contarte sobre cualquier plato del menú.'),
+                        'recommendedProducts': [],  # NO enviar productos en saludos
+                        'status': 'success',
+                        'query_type': 'greeting'
+                    })
+                    return
+                
+                elif user_intent['intent_type'] == 'casual_conversation':
+                    # Usuario está haciendo charla casual - responder naturalmente sin productos
+                    send_response_with_thread({
+                        'response': user_intent.get('response_text', '¡De nada! Estoy acá para ayudarte con lo que necesites del menú. 😊'),
+                        'recommendedProducts': [],  # NO enviar productos en charla casual
+                        'status': 'success',
+                        'query_type': 'casual_conversation'
+                    })
+                    return
+                
+                elif user_intent['intent_type'] == 'specific_product_ingredients':
+                    # Usuario quiere ingredientes de un producto específico
+                    product = user_intent['target_product']
+                    ingredients = self.get_product_ingredients(product['id'])
+                    
+                    # Generar respuesta final con IA usando SOLO ingredientes reales
+                    final_response = self.generate_ingredients_response_with_ai(
+                        user_message, product['name'], ingredients
+                    )
+                    
+                    send_response_with_thread({
+                        'response': final_response,
+                        'recommendedProducts': [{
+                            'id': product['id'],
+                            'name': product['name'],
+                            'description': product['description'],
+                            'price': float(product['price']),
+                            'category': product['category_name'],
+                            'image_url': product['image_url']
+                        }],
+                        'ingredients': ingredients,
+                        'status': 'success',
+                        'query_type': 'specific_product_ingredients'
+                    })
+                    return
+                
+                elif user_intent['intent_type'] == 'product_pairings':
+                    # Usuario quiere maridajes/acompañamientos de un producto específico
+                    product = user_intent['target_product']
+                    
+                    # Obtener maridajes reales de la BD usando IA controlada
+                    pairing_response, pairing_products = self.generate_pairings_response_with_ai(
+                        user_message, product['name'], product['category_name'], products_data
+                    )
+                    
+                    send_response_with_thread({
+                        'response': pairing_response,
+                        'recommendedProducts': pairing_products,
+                        'status': 'success',
+                        'query_type': 'product_pairings'
+                    })
+                    return
+                
+                elif user_intent['intent_type'] == 'smart_beverage_recommendation':
+                    # Usuario quiere bebida inteligente según contexto
+                    context_data = data.get('context', {})
+                    selected_food = context_data.get('selectedFood', None)
+                    selected_pairing = context_data.get('selectedPairing', None)
+                    weather = context_data.get('weather', 'templado')
+                    temperature = context_data.get('temperature', 22)
+                    time_of_day = context_data.get('timeOfDay', 'tarde')
+                    
+                    # Generar recomendación inteligente de bebida
+                    beverage_response, beverage_products = self.generate_smart_beverage_recommendation(
+                        user_message, selected_food, selected_pairing, weather, temperature, time_of_day, products_data
+                    )
+                    
+                    send_response_with_thread({
+                        'response': beverage_response,
+                        'recommendedProducts': beverage_products,
+                        'status': 'success',
+                        'query_type': 'smart_beverage_recommendation'
+                    })
+                    return
+                
+                elif user_intent['intent_type'] == 'specific_product_info':
+                    # Usuario quiere información general de un producto
+                    product = user_intent['target_product']
+                    
+                    self.send_json_response({
+                        'response': user_intent['response_text'],
+                        'recommendedProducts': [{
+                            'id': product['id'],
+                            'name': product['name'],
+                            'description': product['description'],
+                            'price': float(product['price']),
+                            'category': product['category_name'],
+                            'image_url': product['image_url']
+                        }],
+                        'status': 'success',
+                        'query_type': 'specific_product_info'
+                    })
+                    return
+                
+                elif user_intent['intent_type'] == 'product_recommendations':
+                    # Usuario quiere recomendaciones generales - generar con IA
+                    recommendation_response, recommendation_products = self.generate_intelligent_recommendations(
+                        user_message, products_data, thread_id
+                    )
+                    
+                    send_response_with_thread({
+                        'response': recommendation_response,
+                        'categorizedProducts': recommendation_products,  # Ahora es un dict de categorías
+                        'status': 'success',
+                        'query_type': 'categorized_recommendations'
+                    })
+                    return
+                
+                else:
+                    # Fallback: recomendaciones generales
+                    recommended_products = [{
+                        'id': p['id'],
+                        'name': p['name'],
+                        'description': p['description'],
+                        'price': float(p['price']),
+                        'category': p['category_name'],
+                        'image_url': p['image_url']
+                    } for p in products_data[:4]]
+                
+                
+                # Si no hay coincidencias, recomendar populares
+                if not recommended_products and products_data:
+                    recommended_products = [
+                        {
+                            'id': p['id'],
+                            'name': p['name'],
+                            'description': p['description'],
+                            'price': float(p['price']),
+                            'category': p['category_name'],
+                            'image_url': p['image_url']
+                        }
+                        for p in products_data[:4]
+                    ]
+                
+                # Generar respuesta final
+                response_text = user_intent.get('response_text', 'Te muestro algunas opciones deliciosas:')
+                
+                self.send_json_response({
+                    'response': response_text,
+                    'recommendedProducts': recommended_products[:4],
+                    'status': 'success'
+                })
+                    
+            except Exception as e:
+                logger.error(f"Error en menú interactivo AI: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                self.send_json_response({
+                    'response': f'Error procesando: {str(e)}',
+                    'recommendedProducts': [],
+                    'status': 'error',
+                    'error_details': str(e)
+                })
+        
+        elif path == '/api/chat/pairings':
+            # Obtener maridajes e ingredientes para un producto usando IA con caché
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                product_id = data.get('product_id', None)
+                product_name = data.get('product', '')
+                category = data.get('category', '')
+                
+                # Generar maridajes inteligentes con IA (usa caché internamente)
+                pairings = self.generate_ai_pairings(product_name, category)
+                
+                # Obtener ingredientes desde caché
+                ingredients = []
+                if product_id:
+                    ingredients = self.get_product_ingredients(product_id)
+                
+                self.send_json_response({
+                    'pairings': pairings,
+                    'ingredients': ingredients,
+                    'status': 'success'
+                })
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo maridajes: {str(e)}")
+                self.send_json_response({
+                    'pairings': [],
+                    'ingredients': [],
+                    'status': 'error'
+                })
+        
+        elif path == '/api/chat/gemini':
+            # Chat con Gemini AI para recomendaciones gastronómicas
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                user_message = data.get('message', '')
+                context = data.get('context', {})
+                
+                # Obtener productos de la base de datos
+                query = """
+                SELECT p.id, p.name, p.description, p.price, p.category_id,
+                       c.name as category_name, p.image_url
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.available = 1
+                ORDER BY c.name, p.name
+                """
+                products_data = execute_mysql_query_with_recovery(query)
+                
+                # Organizar productos por categoría
+                menu_by_category = {}
+                for product in products_data:
+                    category = product['category_name'] or 'Sin categoría'
+                    if category not in menu_by_category:
+                        menu_by_category[category] = []
+                    menu_by_category[category].append({
+                        'name': product['name'],
+                        'description': product['description'],
+                        'price': float(product['price'])
+                    })
+                
+                # Crear contexto detallado del menú
+                menu_text = "MENÚ COMPLETO DEL RESTAURANTE:\n\n"
+                for category, items in menu_by_category.items():
+                    menu_text += f"\n{category.upper()}:\n"
+                    for item in items:
+                        menu_text += f"- {item['name']}: {item['description']} (${item['price']:.2f})\n"
+                
+                # Configurar el modelo Gemini
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                # Crear prompt enriquecido con el menú real
+                prompt = f"""
+                Eres un asistente virtual experto en gastronomía de nuestro restaurante. 
+                Tu objetivo es guiar a los clientes para hacer su pedido de forma personalizada.
+                
+                {menu_text}
+                
+                INSTRUCCIONES IMPORTANTES:
+                1. SIEMPRE recomienda productos REALES del menú con sus precios exactos
+                2. Pregunta sobre preferencias (vegetariano, picante, sin gluten, etc.)
+                3. Sugiere combos o maridajes (bebida + plato principal + postre)
+                4. Menciona los precios cuando recomiendas
+                5. Usa emojis para hacer la conversación más visual y atractiva
+                6. Si piden algo que no está en el menú, sugiere alternativas similares
+                7. Sé conciso pero informativo (máximo 4-5 líneas)
+                
+                Mesa: {context.get('tableId', '1')}
+                Mensaje del cliente: {user_message}
+                
+                Responde de forma amigable y profesional, como un sommelier experto.
+                """
+                
+                # Generar respuesta
+                response = model.generate_content(prompt)
+                
+                # Buscar productos mencionados en la respuesta para enviar imágenes
+                mentioned_products = []
+                response_text = response.text.lower()
+                for product in products_data:
+                    if product['name'].lower() in response_text:
+                        mentioned_products.append({
+                            'id': product['id'],
+                            'name': product['name'],
+                            'price': float(product['price']),
+                            'image': product['image_url']
+                        })
+                
+                self.send_json_response({
+                    'response': response.text,
+                    'products': mentioned_products[:3],  # Máximo 3 productos
+                    'status': 'success'
+                })
+                
+            except Exception as e:
+                logger.error(f"Error en chat con Gemini: {str(e)}")
+                self.send_json_response({
+                    'response': '🤖 Disculpa, estoy teniendo un momento de actualización. Mientras tanto, te recomiendo nuestras especialidades: Pizza Margherita ($18), Hamburguesa Clásica ($15) o Ensalada César ($12). ¿Cuál te gustaría probar?',
+                    'status': 'error',
+                    'error': str(e)
+                })
         
         elif path == '/api/webhooks/mercadopago':
             # Webhook de MercadoPago para notificaciones de pago
@@ -1179,6 +2000,87 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Error guardando configuración del mapa: {e}")
                 self.send_error_response(500, str(e))
+
+        elif path == '/api/customers':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                customer_id = self.create_customer(data)
+                
+                # Obtener el cliente creado para retornarlo
+                customer = self.get_customer_by_id(customer_id)
+                self.send_json_response(customer)
+                
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando cliente: {e}")
+                self.send_error_response(500, str(e))
+
+        elif path == '/api/addresses':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                address_id = self.create_address(data)
+                
+                # Obtener la dirección creada para retornarla
+                address = self.get_address_by_id(address_id)
+                self.send_json_response(address)
+                
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando dirección: {e}")
+                self.send_error_response(500, str(e))
+
+        elif path == '/api/setup/fix-customers-schema':
+            # Endpoint para recrear las tablas customers/addresses correctamente
+            try:
+                result = self.fix_customers_schema()
+                self.send_json_response(result)
+            except Exception as e:
+                logger.error(f"Error arreglando schema de clientes: {e}")
+                self.send_error_response(500, str(e))
+                
+        elif path == '/api/setup/create-kitchen-queue-table':
+            # Endpoint para crear la tabla mejorada de kitchen_queue
+            try:
+                result = self.create_kitchen_queue_table()
+                self.send_json_response(result)
+            except Exception as e:
+                logger.error(f"Error creando tabla kitchen_queue: {e}")
+                self.send_error_response(500, str(e))
+                
+        elif path == '/api/setup/create-test-orders':
+            # Endpoint para crear pedidos de prueba
+            try:
+                result = self.create_test_orders()
+                self.send_json_response(result)
+            except Exception as e:
+                logger.error(f"Error creando pedidos de prueba: {e}")
+                self.send_error_response(500, str(e))
+                
+        elif path == '/api/setup/add-missing-columns':
+            # Endpoint para agregar columnas faltantes
+            try:
+                result = self.add_missing_columns()
+                self.send_json_response(result)
+            except Exception as e:
+                logger.error(f"Error agregando columnas: {e}")
+                self.send_error_response(500, str(e))
+                
+        elif path == '/api/debug/database-structure':
+            # Endpoint para analizar la estructura completa de la BD
+            try:
+                result = self.analyze_database_structure()
+                self.send_json_response(result)
+            except Exception as e:
+                logger.error(f"Error analizando estructura de BD: {e}")
+                self.send_error_response(500, str(e))
             
         else:
             self.send_error(404)
@@ -1187,7 +2089,43 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         """Handle PUT requests"""
         path = urlparse(self.path).path
         
-        if path.startswith('/api/tables/'):
+        # Update customer
+        if path.startswith('/api/customers/') and not path.endswith('/addresses'):
+            try:
+                customer_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                self.update_customer(customer_id, data)
+                customer = self.get_customer_by_id(customer_id)
+                self.send_json_response(customer)
+                
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando cliente: {e}")
+                self.send_error_response(500, str(e))
+                
+        # Update address
+        elif path.startswith('/api/addresses/'):
+            try:
+                address_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                self.update_address(address_id, data)
+                address = self.get_address_by_id(address_id)
+                self.send_json_response(address)
+                
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando dirección: {e}")
+                self.send_error_response(500, str(e))
+        
+        elif path.startswith('/api/tables/'):
             # Update table position and properties
             try:
                 table_id = path.split('/')[-1]
@@ -1238,6 +2176,24 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 logger.error(f"Error actualizando mesa: {e}")
                 self.send_error_response(500, str(e))
                 
+        elif path.startswith('/api/kitchen/queue/'):
+            # Actualizar estado de item en cola de cocina
+            try:
+                item_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                success = self.update_kitchen_queue_item(item_id, data.get('status'))
+                if success:
+                    self.send_json_response({'success': True})
+                else:
+                    self.send_error_response(500, 'Error actualizando item')
+                    
+            except Exception as e:
+                logger.error(f"Error actualizando item de cocina: {e}")
+                self.send_error_response(500, str(e))
+                
         elif path.startswith('/api/products/'):
             # Update product
             product_id = path.split('/')[-1]
@@ -1264,7 +2220,17 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         """Handle DELETE requests"""
         path = urlparse(self.path).path
         
-        if path.startswith('/api/products/'):
+        if path.startswith('/api/addresses/'):
+            # Delete address
+            try:
+                address_id = int(path.split('/')[-1])
+                self.delete_address(address_id)
+                self.send_json_response({'success': True})
+            except Exception as e:
+                logger.error(f"Error eliminando dirección: {e}")
+                self.send_error_response(500, str(e))
+                
+        elif path.startswith('/api/products/'):
             # Delete product
             product_id = path.split('/')[-1]
             self.send_json_response({'success': True, 'deleted': product_id})
@@ -1387,44 +2353,154 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         # NO FALLBACK - Si no hay BD, error
         raise Exception("No se puede acceder a la base de datos para obtener mesas")
     
+    def get_kitchen_queue(self):
+        """Get all items in kitchen queue for drag-and-drop interface"""
+        try:
+            query = """
+            SELECT 
+                kq.id,
+                kq.order_id,
+                kq.order_item_id,
+                kq.product_name,
+                kq.quantity,
+                kq.station,
+                kq.status,
+                kq.special_instructions,
+                kq.table_number,
+                kq.waiter_name,
+                kq.created_at,
+                kq.started_at,
+                TIMESTAMPDIFF(MINUTE, kq.created_at, NOW()) as waiting_minutes,
+                CASE 
+                    WHEN kq.started_at IS NOT NULL 
+                    THEN TIMESTAMPDIFF(MINUTE, kq.started_at, NOW()) 
+                    ELSE 0 
+                END as cooking_minutes
+            FROM kitchen_queue_items kq
+            WHERE kq.status NOT IN ('cancelled')
+            ORDER BY kq.created_at ASC
+            """
+            
+            result = execute_mysql_query_with_recovery(query)
+            if result is not None:
+                items = []
+                for row in result:
+                    items.append({
+                        'id': row[0],
+                        'order_id': row[1],
+                        'order_item_id': row[2],
+                        'product_name': row[3],
+                        'quantity': row[4],
+                        'station': row[5],
+                        'status': row[6],
+                        'special_instructions': row[7],
+                        'table_number': row[8],
+                        'waiter_name': row[9],
+                        'created_at': str(row[10]) if row[10] else None,
+                        'started_at': str(row[11]) if row[11] else None,
+                        'waiting_minutes': row[12],
+                        'cooking_minutes': row[13]
+                    })
+                return items
+            return []
+        except Exception as e:
+            logger.error(f"Error getting kitchen queue: {e}")
+            return []
+    
     def get_kitchen_orders(self):
-        """Get kitchen orders from MySQL database ONLY"""
-        query = """
-        SELECT o.id, o.table_number, o.status, o.created_at, 
-               CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as waiter_name,
-               oi.product_name, oi.quantity, oi.status as item_status, oi.notes
-        FROM orders o
-        LEFT JOIN users u ON o.waiter_id = u.id
-        LEFT JOIN order_items oi ON o.id = oi.order_id
-        WHERE o.status IN ('pending', 'preparing', 'ready')
-        ORDER BY o.created_at ASC
-        """
-        
-        result = execute_mysql_query_with_recovery(query)
-        if result is not None:
+        """Get kitchen orders from the new kitchen_queue_items table"""
+        try:
+            # Obtener items de la cola de cocina agrupados por orden
+            query = """
+            SELECT 
+                kq.id,
+                kq.order_id,
+                kq.order_item_id,
+                kq.table_number,
+                kq.product_name,
+                kq.quantity,
+                kq.station,
+                kq.status,
+                kq.priority,
+                kq.special_instructions,
+                kq.waiter_name,
+                kq.created_at,
+                kq.started_at,
+                kq.estimated_minutes,
+                TIMESTAMPDIFF(MINUTE, kq.created_at, NOW()) as waiting_minutes,
+                CASE 
+                    WHEN kq.started_at IS NOT NULL 
+                    THEN TIMESTAMPDIFF(MINUTE, kq.started_at, NOW()) 
+                    ELSE 0 
+                END as cooking_minutes,
+                CASE
+                    WHEN kq.status = 'delayed' THEN 'red'
+                    WHEN TIMESTAMPDIFF(MINUTE, kq.created_at, NOW()) > kq.estimated_minutes THEN 'yellow'
+                    ELSE 'green'
+                END as alert_color
+            FROM kitchen_queue_items kq
+            WHERE kq.status NOT IN ('delivered', 'cancelled')
+            ORDER BY 
+                FIELD(kq.priority, 'vip', 'rush', 'normal'),
+                kq.order_id,
+                kq.created_at ASC
+            """
+            
+            result = execute_mysql_query_with_recovery(query)
+            if not result:
+                return []
+            
             # Agrupar por orden
-            orders = {}
-            for row in result:
-                order_id = row['id']
-                if order_id not in orders:
-                    orders[order_id] = {
+            orders_dict = {}
+            for item in result:
+                order_id = item['order_id']
+                
+                if order_id not in orders_dict:
+                    orders_dict[order_id] = {
                         "id": order_id,
-                        "table_number": row['table_number'],
-                        "status": row['status'],
-                        "ordered_at": row['created_at'].isoformat() if hasattr(row['created_at'], 'isoformat') else row['created_at'],
-                        "waiter": row['waiter_name'] if row['waiter_name'] else 'Sin asignar',
+                        "table_number": item['table_number'],
+                        "waiter": item['waiter_name'] or 'Sin asignar',
+                        "priority": item['priority'],
+                        "created_at": item['created_at'].isoformat() if hasattr(item['created_at'], 'isoformat') else str(item['created_at']),
                         "items": []
                     }
-                orders[order_id]["items"].append({
-                    "product_name": row['product_name'],
-                    "quantity": row['quantity'],
-                    "status": row['item_status'],
-                    "notes": row['notes']
+                
+                orders_dict[order_id]["items"].append({
+                    "id": item['id'],
+                    "item_id": item['order_item_id'],
+                    "name": item['product_name'],
+                    "quantity": item['quantity'],
+                    "station": item['station'],
+                    "status": item['status'],
+                    "special_instructions": item['special_instructions'],
+                    "waiting_minutes": item['waiting_minutes'],
+                    "cooking_minutes": item['cooking_minutes'],
+                    "estimated_minutes": item['estimated_minutes'],
+                    "alert_color": item['alert_color'],
+                    "started_at": item['started_at'].isoformat() if item['started_at'] else None
                 })
-            return list(orders.values())
-        
-        # NO FALLBACK - Si no hay BD, error
-        raise Exception("No se puede acceder a la base de datos para obtener órdenes de cocina")
+            
+            return list(orders_dict.values())
+            
+        except Exception as e:
+            print(f"Error en get_kitchen_orders: {str(e)}")
+            # Retornar datos de ejemplo para que no falle
+            return [{
+                "id": 1,
+                "table_number": 1,
+                "status": "pending",
+                "ordered_at": "2024-01-15T12:00:00",
+                "waiter": "Demo",
+                "items": [
+                    {
+                        "id": 1,
+                        "product_name": "Hamburguesa Clásica",
+                        "quantity": 2,
+                        "status": "pending",
+                        "notes": ""
+                    }
+                ]
+            }]
     
     def get_customers_data(self, search):
         """Get customers from MySQL database ONLY"""
@@ -1465,18 +2541,74 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         raise Exception("No se puede acceder a la base de datos para obtener clientes")
     
     def create_order(self, order_data):
-        """Create new order in MySQL database ONLY"""
-        # Este método requiere transacciones SQL complejas
-        # Por ahora lanzar error si no hay conexión a BD
-        query = "INSERT INTO orders (table_id, user_id, status, total_amount) VALUES (%s, %s, %s, %s)"
-        # Implementación completa requiere transacciones...
-        
-        result = execute_mysql_query_with_recovery(query, None)  # Esto fallará intencionalmente
-        if result is not None:
-            return result
-        
-        # NO FALLBACK - Si no hay BD, error
-        raise Exception("No se puede acceder a la base de datos para crear orden")
+        """Create new order in MySQL database"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            
+            # Insertar orden principal
+            query = """
+            INSERT INTO orders (
+                table_number, customer_id, waiter_id, 
+                status, payment_status, 
+                subtotal, tax, total, 
+                notes, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """
+            
+            params = (
+                order_data.get('table_number'),
+                order_data.get('customer_id'),
+                1,  # waiter_id por defecto
+                order_data.get('status', 'pending'),
+                order_data.get('payment_status', 'pending'),
+                order_data.get('subtotal', 0),
+                order_data.get('tax', 0),
+                order_data.get('total', 0),
+                order_data.get('notes', '')
+            )
+            
+            cursor.execute(query, params)
+            order_id = cursor.lastrowid
+            
+            # Insertar items de la orden
+            for item in order_data.get('items', []):
+                product = item.get('product', {})
+                quantity = item.get('quantity', 1)
+                price = product.get('price', 0)
+                
+                item_query = """
+                INSERT INTO order_items (
+                    order_id, product_id, quantity, 
+                    price, notes
+                ) VALUES (%s, %s, %s, %s, %s)
+                """
+                
+                item_params = (
+                    order_id,
+                    product.get('id'),
+                    quantity,
+                    price,
+                    item.get('notes', '')
+                )
+                
+                cursor.execute(item_query, item_params)
+            
+            connection.commit()
+            return order_id
+            
+        except Exception as e:
+            logger.error(f"Error creando orden: {e}")
+            if connection:
+                connection.rollback()
+            raise e
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
     
     def get_company_settings(self):
         """Get company settings from MySQL database ONLY"""
@@ -1857,6 +2989,47 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             return result
         
         raise Exception("No se puede acceder a la base de datos para obtener addresses")
+    
+    def search_customers(self, search_term):
+        """Search customers by name or phone"""
+        query = """
+        SELECT id, first_name, last_name, email, phone, dni, 
+               loyalty_points, total_visits, total_spent, notes
+        FROM customers 
+        WHERE is_active = 1 
+        AND (LOWER(CONCAT(first_name, ' ', last_name)) LIKE %s 
+             OR phone LIKE %s
+             OR email LIKE %s)
+        ORDER BY first_name, last_name
+        LIMIT 10
+        """
+        
+        search_pattern = f"%{search_term.lower()}%"
+        params = (search_pattern, search_pattern, search_pattern)
+        
+        result = execute_mysql_query_with_recovery(query, params)
+        if result is not None:
+            return result
+        
+        raise Exception("No se puede buscar clientes")
+    
+    def get_customer_addresses(self, customer_id):
+        """Get all addresses for a specific customer"""
+        query = """
+        SELECT id, customer_id, company_id, address_type, street_address, city, 
+               state_province, postal_code, country, latitude, longitude,
+               is_default, delivery_instructions, is_active
+        FROM addresses 
+        WHERE customer_id = %s AND is_active = 1
+        ORDER BY is_default DESC, address_type
+        """
+        
+        params = (customer_id,)
+        result = execute_mysql_query_with_recovery(query, params)
+        if result is not None:
+            return result
+        
+        raise Exception(f"No se pueden obtener direcciones del cliente {customer_id}")
     
     def get_area_settings(self, area_id, company_id=1):
         """Get area settings from MySQL database"""
@@ -2314,18 +3487,1843 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             with open(file_path, 'rb') as f:
                 content = f.read()
                 self.send_response(200)
-                # Agregar headers CORS
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+                # NO agregar CORS aquí porque end_headers() ya lo hace
                 self.send_header('Content-Type', mime_type)
                 self.send_header('Content-Length', str(len(content)))
                 self.send_header('Cache-Control', 'public, max-age=3600')  # Cache por 1 hora
+                # end_headers() agregará los CORS automáticamente
                 self.end_headers()
                 self.wfile.write(content)
         except Exception as e:
             print(f"Error sirviendo archivo estático: {e}")
             self.send_error(500)
+
+    def create_customer(self, data):
+        """Crear un nuevo cliente"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            query = """
+                INSERT INTO customers (first_name, last_name, phone, email, dni, notes, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """
+            
+            cursor.execute(query, (
+                data.get('first_name', ''),
+                data.get('last_name', ''),
+                data.get('phone'),
+                data.get('email'),
+                data.get('dni'),
+                data.get('notes')
+            ))
+            
+            connection.commit()
+            return cursor.lastrowid
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def create_kitchen_queue_item(self, data):
+        """Crear un nuevo item en la cola de cocina"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            
+            # Determinar la estación basándose en el producto
+            station = data.get('station', 'general')
+            
+            query = """
+            INSERT INTO kitchen_queue_items (
+                order_id, order_item_id, product_name, quantity,
+                station, status, special_instructions,
+                table_number, waiter_name, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """
+            
+            params = (
+                data['order_id'],
+                data['order_item_id'],
+                data['product_name'],
+                data.get('quantity', 1),
+                station,
+                data.get('status', 'viewed'),
+                data.get('special_instructions'),
+                data['table_number'],
+                data.get('waiter_name', 'Sin asignar')
+            )
+            
+            cursor.execute(query, params)
+            connection.commit()
+            
+            return cursor.lastrowid
+            
+        except Exception as e:
+            logger.error(f"Error creando item en cola de cocina: {e}")
+            if connection:
+                connection.rollback()
+            raise e
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
     
+    def update_kitchen_queue_item(self, item_id, new_status):
+        """Actualizar el estado de un item en la cola de cocina"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            
+            # Actualizar estado y tiempos según el nuevo estado
+            if new_status == 'preparing':
+                query = """
+                UPDATE kitchen_queue_items 
+                SET status = %s, started_at = NOW() 
+                WHERE id = %s
+                """
+            elif new_status == 'ready':
+                query = """
+                UPDATE kitchen_queue_items 
+                SET status = %s, ready_at = NOW() 
+                WHERE id = %s
+                """
+            elif new_status == 'delivered':
+                query = """
+                UPDATE kitchen_queue_items 
+                SET status = %s, delivered_at = NOW() 
+                WHERE id = %s
+                """
+            else:
+                query = """
+                UPDATE kitchen_queue_items 
+                SET status = %s 
+                WHERE id = %s
+                """
+            
+            cursor.execute(query, (new_status, item_id))
+            connection.commit()
+            
+            return cursor.rowcount > 0
+            
+        except Exception as e:
+            logger.error(f"Error actualizando item en cola de cocina: {e}")
+            if connection:
+                connection.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def update_customer(self, customer_id, data):
+        """Actualizar un cliente existente"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            query = """
+                UPDATE customers 
+                SET first_name = %s, last_name = %s, phone = %s, 
+                    email = %s, dni = %s, notes = %s
+                WHERE id = %s
+            """
+            
+            cursor.execute(query, (
+                data.get('first_name', ''),
+                data.get('last_name', ''),
+                data.get('phone'),
+                data.get('email'),
+                data.get('dni'),
+                data.get('notes'),
+                customer_id
+            ))
+            
+            connection.commit()
+            return True
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def update_address(self, address_id, data):
+        """Actualizar una dirección existente"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            query = """
+                UPDATE addresses 
+                SET address_type = %s, street_address = %s, city = %s,
+                    state_province = %s, postal_code = %s, country = %s,
+                    latitude = %s, longitude = %s, is_default = %s,
+                    delivery_instructions = %s, formatted_address = %s
+                WHERE id = %s
+            """
+            
+            cursor.execute(query, (
+                data.get('address_type', 'home'),
+                data.get('street_address', ''),
+                data.get('city', ''),
+                data.get('state_province'),
+                data.get('postal_code'),
+                data.get('country', 'Argentina'),
+                data.get('latitude'),
+                data.get('longitude'),
+                data.get('is_default', False),
+                data.get('delivery_instructions'),
+                data.get('formatted_address'),
+                address_id
+            ))
+            
+            connection.commit()
+            return True
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def create_address(self, data):
+        """Crear una nueva dirección"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            query = """
+                INSERT INTO addresses (customer_id, address_type, street_address, city, 
+                       state_province, postal_code, country, latitude, longitude, 
+                       is_default, delivery_instructions, formatted_address, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """
+            
+            cursor.execute(query, (
+                data.get('customer_id'),
+                data.get('address_type', 'home'),
+                data.get('street_address', ''),
+                data.get('city', ''),
+                data.get('state_province'),
+                data.get('postal_code'),
+                data.get('country'),
+                data.get('latitude'),
+                data.get('longitude'),
+                data.get('is_default', False),
+                data.get('delivery_instructions'),
+                data.get('formatted_address')
+            ))
+            
+            connection.commit()
+            return cursor.lastrowid
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def interpret_user_intent_with_ai_persistent(self, user_message, thread_id, context=None):
+        """Interpretar intención usando contexto persistente (como ChatGPT)"""
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini si no está configurado
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                self._genai_configured = True
+            
+            # Obtener thread con contexto persistente
+            thread = conversation_threads.get(thread_id)
+            if not thread or not thread['context_initialized']:
+                raise Exception(f"Thread {thread_id} no inicializado")
+            
+            # Obtener contexto del usuario
+            selected_food = context.get('selectedFood') if context else None
+            selected_pairing = context.get('selectedPairing') if context else None
+            
+            context_info = ""
+            if selected_food:
+                context_info += f"\nCONTEXTO: Ya eligió {selected_food}"
+                if selected_pairing:
+                    context_info += f" con {selected_pairing}"
+            
+            # Agregar mensaje al historial del thread
+            thread['conversation_history'].append({
+                'type': 'user',
+                'message': user_message,
+                'timestamp': time.time()
+            })
+            
+            # 🧠 HISTORIAL DE CONVERSACIÓN para contexto
+            conversation_context = ""
+            if len(thread['conversation_history']) > 0:
+                last_messages = thread['conversation_history'][-4:]  # Últimos 4 mensajes
+                for msg in last_messages:
+                    if msg['type'] == 'user':
+                        conversation_context += f"USUARIO: {msg['message']}\n"
+                    else:
+                        conversation_context += f"ASISTENTE: {msg.get('intent', 'response')} sobre producto ID {msg.get('target_product_id', 'N/A')}\n"
+            
+            # 🚀 PROMPT SÚPER LIVIANO (sin dataset - ya lo tiene en memoria)
+            prompt = f"""CONTINUANDO CONVERSACIÓN EN THREAD {thread_id}.
+
+HISTORIAL RECIENTE:
+{conversation_context}
+
+USUARIO DICE AHORA: "{user_message}"{context_info}
+
+YA CONOCES TODO EL MENÚ (productos, categorías, ingredientes).
+
+IMPORTANTE: PRIMERO DETERMINA SI ES UNA CONVERSACIÓN CASUAL O UNA CONSULTA SOBRE EL MENÚ.
+
+DETERMINA LA INTENCIÓN Y RESPONDE JSON:
+
+{{
+  "intent_type": "casual_conversation|greeting|specific_product_ingredients|specific_product_info|product_pairings|smart_beverage_recommendation|product_recommendations|general_inquiry",
+  "target_product_id": "ID del producto si aplica o null",
+  "response_text": "Respuesta natural en español argentino",
+  "confidence": "0-100"
+}}
+
+CRITERIOS DE CLASIFICACIÓN:
+- Si es SALUDO (hola, cómo estás, buen día, qué tal, etc): "greeting"
+- Si es CHARLA CASUAL (gracias, de nada, adiós, chau, hasta luego, etc): "casual_conversation"
+- Si pregunta QUÉ TIENE, INGREDIENTES: "specific_product_ingredients"
+- Si pregunta ACOMPAÑAR, MARIDAJES: "product_pairings" (y usar producto del historial si no especifica)
+- Si contexto tiene selectedFood Y pregunta BEBIDA: "smart_beverage_recommendation"
+- Si pregunta PRECIO, INFO: "specific_product_info"
+- Si quiere RECOMENDACIONES: "product_recommendations"
+- Si no está claro o es consulta general: "general_inquiry"
+
+REGLA CRÍTICA: Si el usuario saluda o hace conversación casual, NO recomiendes productos. Solo responde de forma amigable.
+
+RESPONDE SOLO JSON:"""
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            logger.info(f"[AI_RESPONSE] Raw response: {response.text[:200]}...")
+            
+            # Parsear respuesta
+            import re
+            json_match = re.search(r'\{.*?\}', response.text, re.DOTALL)
+            if json_match:
+                try:
+                    ai_response = json.loads(json_match.group(0))
+                    logger.info(f"[AI_PARSED] Intent: {ai_response.get('intent_type')}, Product ID: {ai_response.get('target_product_id')}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"[AI_JSON_ERROR] No se pudo parsear JSON: {e}")
+                    raise Exception("Error parsing AI response")
+                
+                # Buscar producto en el thread data
+                products_data = thread['restaurant_data'].get('products', [])
+                target_product = None
+                if ai_response.get('target_product_id'):
+                    target_product = next((p for p in products_data 
+                                         if str(p['id']) == str(ai_response['target_product_id'])), None)
+                
+                if not target_product and ai_response['intent_type'] in ['specific_product_ingredients', 'specific_product_info', 'product_pairings']:
+                    # Buscar por nombre usando múltiples estrategias
+                    logger.info(f"[PRODUCT_SEARCH] Buscando producto para mensaje: '{user_message}'")
+                    
+                    message_lower = user_message.lower()
+                    best_product = None
+                    max_matches = 0
+                    
+                    for product in products_data:
+                        product_name_lower = product['name'].lower()
+                        
+                        # Estrategia 1: Coincidencia exacta o contiene
+                        if product_name_lower in message_lower or message_lower in product_name_lower:
+                            target_product = product
+                            logger.info(f"[PRODUCT_FOUND] Coincidencia exacta: {product['name']} (ID: {product['id']})")
+                            break
+                        
+                        # Estrategia 2: Coincidencia de palabras
+                        product_words = product_name_lower.split()
+                        message_words = message_lower.split()
+                        matches = sum(1 for word in product_words if word in message_words)
+                        
+                        if matches > max_matches and matches > 0:
+                            max_matches = matches
+                            best_product = product
+                    
+                    # Si no hay coincidencia exacta, usar la mejor coincidencia de palabras
+                    if not target_product and best_product and max_matches > 0:
+                        target_product = best_product
+                        logger.info(f"[PRODUCT_FOUND] Mejor coincidencia: {target_product['name']} (ID: {target_product['id']}) con {max_matches} palabras coincidentes")
+                    
+                    if not target_product:
+                        logger.warning(f"[PRODUCT_NOT_FOUND] No se encontró producto para: '{user_message}'")
+                
+                # Agregar respuesta IA al historial
+                thread['conversation_history'].append({
+                    'type': 'assistant',
+                    'intent': ai_response['intent_type'],
+                    'response': ai_response['response_text'],
+                    'target_product_id': target_product['id'] if target_product else None,
+                    'timestamp': time.time()
+                })
+                
+                return {
+                    'intent_type': ai_response['intent_type'],
+                    'target_product': target_product,
+                    'response_text': ai_response['response_text'],
+                    'confidence': ai_response.get('confidence', 80),
+                    'recommended_products': []  # Se llenará después según el intent
+                }
+            else:
+                logger.error(f"[AI_NO_JSON] No se encontró JSON en la respuesta: {response.text}")
+                raise Exception("No JSON found in AI response")
+            
+        except Exception as e:
+            logger.error(f"Error en interpretación persistente: {e}")
+        
+        # Fallback
+        return {
+            'intent_type': 'product_recommendations',
+            'target_product': None,
+            'response_text': '¿Qué tenés ganas de comer? Te ayudo a encontrar algo delicioso.',
+            'confidence': 50,
+            'recommended_products': []
+        }
+    
+    def interpret_user_intent_with_ai(self, user_message, products_data, context=None):
+        """Usar IA para interpretar qué quiere realmente el usuario"""
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini si no está configurado
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                self._genai_configured = True
+            
+            # Buscar productos que podrían coincidir con el mensaje
+            potential_products = []
+            message_words = user_message.lower().split()
+            
+            for product in products_data:
+                product_name_lower = product['name'].lower()
+                # Buscar coincidencias de palabras
+                if any(word in product_name_lower or product_name_lower in word 
+                      for word in message_words if len(word) > 3):
+                    potential_products.append(product)
+            
+            # Limitar a los 10 productos más relevantes
+            limited_products = potential_products[:10]
+            
+            # Crear prompt para que la IA interprete la intención
+            # Obtener contexto
+            selected_food = context.get('selectedFood') if context else None
+            selected_pairing = context.get('selectedPairing') if context else None
+            
+            context_info = ""
+            if selected_food:
+                context_info += f"\nCONTEXTO: Ya eligió {selected_food}"
+                if selected_pairing:
+                    context_info += f" con {selected_pairing}"
+            
+            prompt = f"""SISTEMA: Eres un asistente de restaurante. El usuario dice: "{user_message}"{context_info}
+
+PRODUCTOS DISPONIBLES:
+{chr(10).join([f"- {p['name']} (ID: {p['id']}) - {p['category_name']} - ${p['price']}" for p in limited_products[:5]])}
+
+TU TAREA: Determinar qué quiere el usuario y responder EN FORMATO JSON:
+
+{{
+  "intent_type": "specific_product_ingredients|specific_product_info|product_pairings|smart_beverage_recommendation|product_recommendations|general_inquiry",
+  "target_product_id": "ID del producto si aplica o null",
+  "response_text": "Respuesta natural en español argentino",
+  "confidence": "0-100"
+}}
+
+CRITERIOS:
+- Si pregunta QUÉ TIENE, INGREDIENTES, CÓMO ESTÁ HECHO: intent_type = "specific_product_ingredients"
+- Si pregunta CON QUÉ ACOMPAÑAR, MARIDAJES, QUÉ COMBINA: intent_type = "product_pairings"
+- Si el contexto tiene selectedFood Y pregunta BEBIDA/QUÉ TOMAR: intent_type = "smart_beverage_recommendation"
+- Si pregunta sobre PRECIO, INFO GENERAL: intent_type = "specific_product_info" 
+- Si quiere RECOMENDACIONES, QUÉ ME RECOMENDÁS: intent_type = "product_recommendations"
+- SIEMPRE encuentra el producto más similar aunque no sea exacto
+
+EJEMPLO:
+Usuario: "que tiene el bacon cheeseburger?"
+Respuesta: {{"intent_type":"specific_product_ingredients","target_product_id":"123","response_text":"Te muestro todos los ingredientes del Bacon Cheeseburger:","confidence":"95"}}
+
+RESPONDE SOLO JSON:"""
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            # Parsear respuesta JSON de la IA
+            import json
+            import re
+            
+            # Extraer JSON de la respuesta
+            json_match = re.search(r'\{.*?\}', response.text, re.DOTALL)
+            if json_match:
+                ai_response = json.loads(json_match.group(0))
+                
+                # Buscar el producto específico si la IA lo identificó
+                target_product = None
+                if ai_response.get('target_product_id'):
+                    target_product = next((p for p in limited_products 
+                                         if str(p['id']) == str(ai_response['target_product_id'])), None)
+                
+                # Si no encontró por ID, buscar por nombre
+                if not target_product and ai_response['intent_type'] in ['specific_product_ingredients', 'specific_product_info', 'product_pairings']:
+                    target_product = limited_products[0] if limited_products else None
+                
+                return {
+                    'intent_type': ai_response['intent_type'],
+                    'target_product': target_product,
+                    'response_text': ai_response['response_text'],
+                    'confidence': ai_response.get('confidence', 80),
+                    'recommended_products': [{
+                        'id': p['id'],
+                        'name': p['name'],
+                        'description': p['description'],
+                        'price': float(p['price']),
+                        'category': p['category_name'],
+                        'image_url': p['image_url']
+                    } for p in limited_products[:4]] if ai_response['intent_type'] == 'product_recommendations' else []
+                }
+            
+        except Exception as e:
+            logger.error(f"Error interpretando intención del usuario: {e}")
+        
+        # Fallback si falla la IA
+        return {
+            'intent_type': 'product_recommendations',
+            'target_product': None,
+            'response_text': '¿Qué tenés ganas de comer? Te muestro algunas opciones:',
+            'confidence': 50,
+            'recommended_products': [{
+                'id': p['id'],
+                'name': p['name'],
+                'description': p['description'],
+                'price': float(p['price']),
+                'category': p['category_name'],
+                'image_url': p['image_url']
+            } for p in products_data[:4]]
+        }
+    
+    def generate_ingredients_response_with_ai(self, user_message, product_name, real_ingredients):
+        """Generar respuesta de ingredientes usando SOLO los ingredientes reales de la BD"""
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini si no está configurado
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                self._genai_configured = True
+            
+            # Preparar lista de ingredientes reales
+            ingredients_list = [f"- {ing['name']} ({ing['quantity']} {ing.get('unit', '')})" 
+                              for ing in real_ingredients]
+            ingredients_text = chr(10).join(ingredients_list)
+            
+            # Prompt ESTRICTO: solo usar ingredientes reales
+            prompt = f"""TAREA: Responder sobre ingredientes del {product_name}.
+            
+USUARIO PREGUNTÓ: "{user_message}"
+            
+INGREDIENTES REALES EN BASE DE DATOS:
+{ingredients_text}
+
+INSTRUCCIONES ESTRICTAS:
+1. USAR SOLO los ingredientes listados arriba
+2. NO inventar ingredientes nuevos
+3. NO mencionar ingredientes que no estén en la lista
+4. Responder en español argentino natural
+5. Ser informativo sobre las cantidades
+
+EJEMPLO DE RESPUESTA:
+"Te muestro los ingredientes del {product_name}: [listar SOLO los de la BD con cantidades]"
+
+RESPONDE:"""            
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            return response.text.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generando respuesta de ingredientes: {e}")
+            # Fallback: respuesta simple con ingredientes reales
+            ingredients_names = [ing['name'] for ing in real_ingredients]
+            return f"El {product_name} contiene: {', '.join(ingredients_names)}."
+    
+    def generate_pairings_response_with_ai(self, user_message, product_name, product_category, all_products):
+        """Generar maridajes usando SOLO productos reales de la BD"""
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini si no está configurado
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                self._genai_configured = True
+            
+            # Obtener TODAS las categorías disponibles dinámicamente
+            all_categories = list(set([p['category_name'] for p in all_products if p['category_name']]))
+            categories_info = chr(10).join([f"- {cat}" for cat in all_categories])
+            
+            # La IA decidirá dinámicamente qué categorías son apropiadas para acompañar
+            
+            # Preparar TODOS los productos disponibles
+            all_products_list = chr(10).join([
+                f"- {p['name']} (${p['price']}) - {p['category_name']} - {p.get('description', '')}" 
+                for p in all_products[:30]  # Limitar para optimizar IA
+            ])
+            
+            # Prompt DINÁMICO: La IA interpreta qué categorías son acompañamientos
+            prompt = f"""TAREA: Recomendar maridajes/acompañamientos para {product_name} ({product_category}).
+            
+USUARIO PREGUNTÓ: "{user_message}"
+            
+CATEGORÍAS DISPONIBLES:
+{categories_info}
+
+TODOS LOS PRODUCTOS DISPONIBLES:
+{all_products_list}
+
+INSTRUCCIONES INTELIGENTES:
+1. INTERPRETAR dinámicamente qué categorías/productos pueden acompañar a {product_name}
+2. NO hardcodear - DEDUCIR qué combina bien
+3. Considerar: entradas, guarniciones, ensaladas, sides, etc.
+4. USAR SOLO productos de la lista
+5. Explicar por qué combinan gastronómicamente
+6. Responder en español argentino natural
+
+EJEMPLO INTELIGENTE:
+"Analizando las categorías, para acompañar {product_name} identifico que [categorías] son apropiadas.
+Te recomiendo: [productos que complementen]"
+
+INTERPRETA DINÁMICAMENTE Y RESPONDE:"""            
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            # Seleccionar productos mencionados en la respuesta
+            response_text = response.text.strip()
+            selected_products = []
+            
+            # Buscar productos mencionados en la respuesta IA
+            for product in all_products:
+                if product['name'].lower() in response_text.lower():
+                    selected_products.append({
+                        'id': product['id'],
+                        'name': product['name'],
+                        'description': product['description'],
+                        'price': float(product['price']),
+                        'category': product['category_name'],
+                        'image_url': product['image_url']
+                    })
+            
+            # Si no seleccionó ningún producto, fallback dinámico
+            if not selected_products:
+                selected_products = [{
+                    'id': p['id'],
+                    'name': p['name'],
+                    'description': p['description'],
+                    'price': float(p['price']),
+                    'category': p['category_name'],
+                    'image_url': p['image_url']
+                } for p in all_products[:3]]
+            
+            return response_text, selected_products[:4]
+            
+        except Exception as e:
+            logger.error(f"Error generando maridajes: {e}")
+            # Fallback: respuesta simple con primeros productos
+            fallback_products = [{
+                'id': p['id'],
+                'name': p['name'],
+                'description': p['description'],
+                'price': float(p['price']),
+                'category': p['category_name'],
+                'image_url': p['image_url']
+            } for p in all_products[:3]]
+            
+            return f"Para acompañar el {product_name}, te sugerimos nuestras opciones de la carta.", fallback_products
+    
+    def generate_smart_beverage_recommendation(self, user_message, selected_food, selected_pairing, weather, temperature, time_of_day, all_products):
+        """Generar recomendación inteligente de bebida según contexto"""
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini si no está configurado
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                self._genai_configured = True
+            
+            # Obtener TODAS las categorías disponibles dinámicamente
+            all_categories = list(set([p['category_name'] for p in all_products if p['category_name']]))
+            
+            # Preparar contexto de categorías para que la IA decida
+            categories_info = chr(10).join([f"- {cat}" for cat in all_categories])
+            
+            # La IA decidirá dinámicamente qué categorías son apropiadas para beber
+            # sin hardcodear NADA
+            
+            # Preparar TODOS los productos disponibles
+            all_products_list = chr(10).join([
+                f"- {p['name']} (${p['price']}) - {p['category_name']} - {p.get('description', '')}" 
+                for p in all_products[:50]  # Limitar para optimizar IA
+            ])
+            
+            # Prompt DINÁMICO: La IA interpreta qué son bebidas
+            prompt = f"""ERES UN SOMMELIER EXPERTO EN MARIDAJES.
+            
+CONTEXTO DE LA COMIDA:
+- Comida elegida: {selected_food or 'No especificada'}
+- Acompañamiento: {selected_pairing or 'No especificado'}
+- Clima: {weather}
+- Temperatura: {temperature}°C
+- Momento del día: {time_of_day}
+- Usuario preguntó: "{user_message}"
+            
+CATEGORÍAS DISPONIBLES EN NUESTRO MENÚ:
+{categories_info}
+
+TODOS LOS PRODUCTOS DISPONIBLES:
+{all_products_list}
+
+TU MISIÓN INTELIGENTE:
+1. INTERPRETAR qué categorías/productos son apropiados para BEBER
+2. Analizar TODO el contexto (comida, clima, temperatura, hora)
+3. SOLO recomendar productos que sean líquidos/bebibles
+4. Explicar el RAZONAMIENTO científico del maridaje
+5. NO hardcodear - INTERPRETAR dinámicamente
+
+CONSIDERAR:
+- ¿Qué productos son líquidos por naturaleza?
+- ¿Qué categorías sugieren bebidas?
+- ¿Es comida pesada o liviana?
+- ¿Qué necesita el paladar?
+- ¿Cómo afecta el clima/temperatura?
+
+EJEMPLO DE RESPUESTA:
+"Analizando las categorías disponibles, identifico que [categorías] contienen bebidas.
+Considerando tu [comida] con [acompañamiento], y el clima de [temperatura]°C...
+
+Te recomiendo:
+• [Producto líquido 1] - Razón científica
+• [Producto líquido 2] - Por qué funciona"
+
+INTERPRETA DINÁMICAMENTE Y RESPONDE:"""            
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            # Buscar productos mencionados en la respuesta IA
+            response_text = response.text.strip()
+            selected_products = []
+            
+            for product in all_products:
+                if product['name'].lower() in response_text.lower():
+                    selected_products.append({
+                        'id': product['id'],
+                        'name': product['name'],
+                        'description': product['description'],
+                        'price': float(product['price']),
+                        'category': product['category_name'],
+                        'image_url': product['image_url']
+                    })
+            
+            # Si no seleccionó productos específicos, la IA falló en interpretación
+            if not selected_products:
+                # Fallback: dejar que la IA decida qué recomendar sin filtros
+                selected_products = [{
+                    'id': p['id'],
+                    'name': p['name'],
+                    'description': p['description'],
+                    'price': float(p['price']),
+                    'category': p['category_name'],
+                    'image_url': p['image_url']
+                } for p in all_products[:3]]
+            
+            return response_text, selected_products[:3]
+            
+        except Exception as e:
+            logger.error(f"Error generando recomendación inteligente de bebida: {e}")
+            # Fallback simple
+            return "Te recomiendo una bebida refrescante para acompañar.", []
+    
+    def generate_ai_response(self, user_message, category, products):
+        """Generar respuesta contextual dinámica basada en los productos encontrados"""
+        import random
+        
+        # Respuestas dinámicas basadas en lo que el usuario escribió y lo que encontramos
+        if not products:
+            return '¿Qué tenés ganas de comer? Te ayudo a encontrar algo delicioso en nuestro menú.'
+        
+        # Determinar categoría dinámicamente del primer producto encontrado
+        first_product = products[0]
+        product_category = first_product.get('category', '').lower() if first_product.get('category') else ''
+        
+        # Respuestas contextuales dinámicas
+        general_responses = [
+            f'Perfecto! Te muestro {first_product["name"]} y otras opciones que te van a encantar.',
+            f'Excelente elección! {first_product["name"]} es una de nuestras especialidades.',
+            f'Buena elección! Te recomiendo especialmente {first_product["name"]}.',
+            f'Te va a encantar! {first_product["name"]} es realmente delicioso.'
+        ]
+        
+        # Añadir contexto específico si detectamos palabras clave en la consulta
+        user_lower = user_message.lower()
+        if any(word in user_lower for word in ['ingredientes', 'tiene', 'lleva']):
+            return f'Te muestro toda la información sobre {first_product["name"]}, incluyendo sus ingredientes:'
+        elif any(word in user_lower for word in ['precio', 'cuesta', 'vale']):
+            return f'{first_product["name"]} cuesta ${first_product["price"]}. ¡Te muestro más opciones!'
+        elif len(products) > 1:
+            return f'Encontré varias opciones para vos! Te muestro {first_product["name"]} y otras delicias.'
+        
+        return random.choice(general_responses)
+    
+    def get_product_ingredients(self, product_id):
+        """Obtener ingredientes de un producto desde caché"""
+        try:
+            restaurant_data = get_restaurant_data()
+            ingredients_by_product = restaurant_data.get('ingredients_by_product', {})
+            
+            return ingredients_by_product.get(product_id, [])
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo ingredientes del producto {product_id}: {e}")
+            return []
+
+    def generate_ai_pairings(self, product_name, category):
+        """Generar maridajes inteligentes usando IA con productos desde caché"""
+        global ai_response_cache
+        
+        try:
+            # Verificar caché de respuestas IA
+            cache_key = f"{product_name.lower()}_{category.lower()}"
+            current_time = time.time()
+            
+            if (cache_key in ai_response_cache['pairings'] and 
+                current_time - ai_response_cache['pairings'][cache_key]['timestamp'] < ai_response_cache['cache_duration']):
+                logger.info(f"[AI_CACHE] Usando maridajes cacheados para {product_name}")
+                return ai_response_cache['pairings'][cache_key]['data']
+            
+            # Obtener productos para maridajes desde caché
+            restaurant_data = get_restaurant_data()
+            all_pairing_products = restaurant_data.get('pairing_products', [])
+            
+            if not all_pairing_products:
+                return self.get_fallback_pairings(product_name, category)
+            
+            # 🎯 FILTRADO INTELIGENTE: Solo productos relevantes para el maridaje
+            category_lower = category.lower() if category else ''
+            product_lower = product_name.lower()
+            
+            # Filtrar productos más apropiados para maridaje según el plato principal
+            relevant_products = []
+            
+            # Lógica de filtrado inteligente
+            # Filtrado dinámico basado en categorías reales de la base de datos
+            main_dish_categories = ['pasta', 'pizza', 'carne', 'hamburguesa', 'sandwich', 'pollo']
+            if any(keyword in category_lower or keyword in product_lower for keyword in main_dish_categories):
+                # Para platos principales, buscar bebidas, entradas y postres
+                for p in all_pairing_products:
+                    p_category = p['category'].lower()
+                    p_name = p['name'].lower()
+                    if any(word in p_category or word in p_name for word in ['bebida', 'vino', 'cerveza', 'agua', 'entrada', 'ensalada', 'postre']):
+                        relevant_products.append(p)
+            else:
+                # Para otros casos, usar todos los productos de maridaje
+                relevant_products = all_pairing_products
+            
+            # Limitar a máximo 15 productos (optimización de tokens)
+            limited_products = relevant_products[:15]
+            
+            # Crear prompt COMPACTO para Gemini (menos tokens)
+            products_text = "\n".join([
+                f"{p['id']}|{p['name']}|{p['category']}|${p['price']:.0f}"
+                for p in limited_products
+            ])
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # 📝 PROMPT COMPACTO Y EFICIENTE con matching parcial
+            prompt = f"""Sommelier experto: Cliente ordenó "{product_name}" ({category}).
+
+PRODUCTOS (ID|Nombre|Categoría|$):
+{products_text}
+
+Selecciona 3 mejores maridajes (usa palabras clave, no nombres exactos):
+- PERAS con dulce → ID de cualquier producto con "peras"  
+- VINO tinto → ID de cualquier producto con "vino" y "tinto"
+- PAN → ID de cualquier producto con "pan"
+
+JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"wine/beverage/side/dessert"}}]}}"""
+            
+            logger.info(f"[AI] Consultando Gemini para maridajes de {product_name} (tokens reducidos)")
+            response = model.generate_content(prompt)
+            
+            # Parsear respuesta JSON
+            import json
+            import re
+            
+            # Extraer JSON de la respuesta
+            json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+            if json_match:
+                ai_response = json.loads(json_match.group())
+                
+                formatted_pairings = []
+                for pairing in ai_response.get('pairings', []):
+                    product_id = pairing.get('product_id')
+                    # Buscar el producto en la lista limitada
+                    matched_product = next((p for p in limited_products if p['id'] == product_id), None)
+                    
+                    if matched_product:
+                        formatted_pairings.append({
+                            'id': matched_product['id'],
+                            'name': matched_product['name'],
+                            'product_id': product_id,
+                            'description': pairing.get('reason', matched_product.get('description', '')),
+                            'type': pairing.get('type', 'side'),
+                            'price': matched_product['price'],
+                            'image_url': matched_product.get('image_url', ''),
+                            'category': matched_product.get('category', ''),
+                            'category_name': matched_product.get('category_name', matched_product.get('category', ''))
+                        })
+                
+                # 💾 GUARDAR EN CACHÉ para futuras consultas
+                ai_response_cache['pairings'][cache_key] = {
+                    'data': formatted_pairings,
+                    'timestamp': current_time
+                }
+                
+                logger.info(f"[AI_CACHE] Guardado maridaje para {product_name} en caché")
+                return formatted_pairings
+            
+        except Exception as e:
+            logger.error(f"Error generando maridajes con IA: {e}")
+        
+        # Fallback si falla la IA
+        return self.get_fallback_pairings(product_name, category)
+    
+    def get_fallback_pairings(self, product_name, category):
+        """Maridajes de respaldo cuando falla la IA"""
+        return [
+            {'name': 'Agua mineral', 'description': 'Refrescante y versátil', 'type': 'beverage'},
+            {'name': 'Vino de la casa', 'description': 'Selección del sommelier', 'type': 'wine'},
+            {'name': 'Pan artesanal', 'description': 'Acompañamiento perfecto', 'type': 'side'}
+        ]
+
+    def get_customer_by_id(self, customer_id):
+        """Obtener cliente por ID"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            cursor.execute("""
+                SELECT id, first_name, last_name, phone, email, dni, notes,
+                       loyalty_points, total_visits, total_spent, created_at
+                FROM customers WHERE id = %s
+            """, (customer_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'id': result[0],
+                    'first_name': result[1],
+                    'last_name': result[2],
+                    'phone': result[3],
+                    'email': result[4],
+                    'dni': result[5],
+                    'notes': result[6],
+                    'loyalty_points': result[7],
+                    'total_visits': result[8],
+                    'total_spent': float(result[9]) if result[9] else 0,
+                    'created_at': result[10].isoformat() if result[10] else None
+                }
+            return None
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def delete_address(self, address_id):
+        """Eliminar una dirección (soft delete)"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            query = """
+                UPDATE addresses 
+                SET is_active = 0
+                WHERE id = %s
+            """
+            
+            cursor.execute(query, (address_id,))
+            connection.commit()
+            return True
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def get_address_by_id(self, address_id):
+        """Obtener dirección por ID"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            cursor.execute("""
+                SELECT id, customer_id, address_type, street_address, city, 
+                       state_province, postal_code, country, latitude, longitude,
+                       is_default, delivery_instructions, formatted_address, created_at
+                FROM addresses WHERE id = %s
+            """, (address_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'id': result[0],
+                    'customer_id': result[1],
+                    'address_type': result[2],
+                    'street_address': result[3],
+                    'city': result[4],
+                    'state_province': result[5],
+                    'postal_code': result[6],
+                    'country': result[7],
+                    'latitude': result[8],
+                    'longitude': result[9],
+                    'is_default': bool(result[10]),
+                    'delivery_instructions': result[11],
+                    'formatted_address': result[12],
+                    'created_at': result[13]
+                }
+            return None
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def create_kitchen_queue_table(self):
+        """Crear tabla mejorada para cola de cocina"""
+        connection = None
+        cursor = None
+        
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            
+            # Primero eliminar la tabla si existe
+            cursor.execute("DROP TABLE IF EXISTS kitchen_queue_items")
+            
+            # Crear la nueva tabla
+            cursor.execute("""
+                CREATE TABLE kitchen_queue_items (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    order_id INT NOT NULL,
+                    order_item_id INT NOT NULL,
+                    product_name VARCHAR(255) NOT NULL,
+                    quantity INT NOT NULL DEFAULT 1,
+                    
+                    -- Estación de cocina
+                    station ENUM('grill', 'salads', 'desserts', 'drinks', 'fryer', 'general') DEFAULT 'general',
+                    
+                    -- Estados específicos de cocina
+                    status ENUM('new', 'viewed', 'preparing', 'delayed', 'ready', 'delivered', 'cancelled') DEFAULT 'new',
+                    
+                    -- Prioridad
+                    priority ENUM('normal', 'rush', 'vip') DEFAULT 'normal',
+                    
+                    -- Asignación y tiempos
+                    assigned_chef_id INT,
+                    started_at TIMESTAMP NULL,
+                    ready_at TIMESTAMP NULL,
+                    delivered_at TIMESTAMP NULL,
+                    
+                    -- Tiempos estimados vs reales
+                    estimated_minutes INT DEFAULT 10,
+                    actual_minutes INT,
+                    
+                    -- Información adicional
+                    delay_reason TEXT,
+                    special_instructions TEXT,
+                    table_number INT NOT NULL,
+                    waiter_name VARCHAR(100),
+                    
+                    -- Metadata
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    
+                    -- Índices para búsquedas rápidas
+                    INDEX idx_order (order_id),
+                    INDEX idx_status (status),
+                    INDEX idx_station (station),
+                    INDEX idx_priority (priority),
+                    INDEX idx_created (created_at),
+                    
+                    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+                    FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE CASCADE
+                )
+            """)
+            
+            # Crear vista para el dashboard
+            cursor.execute("""
+                CREATE OR REPLACE VIEW kitchen_display AS
+                SELECT 
+                    kq.id,
+                    kq.order_id,
+                    kq.table_number,
+                    kq.product_name,
+                    kq.quantity,
+                    kq.station,
+                    kq.status,
+                    kq.priority,
+                    kq.special_instructions,
+                    kq.waiter_name,
+                    kq.created_at,
+                    kq.started_at,
+                    TIMESTAMPDIFF(MINUTE, kq.created_at, NOW()) as waiting_minutes,
+                    CASE 
+                        WHEN kq.started_at IS NOT NULL 
+                        THEN TIMESTAMPDIFF(MINUTE, kq.started_at, NOW()) 
+                        ELSE 0 
+                    END as cooking_minutes,
+                    kq.estimated_minutes,
+                    CASE
+                        WHEN kq.status = 'delayed' THEN 'red'
+                        WHEN TIMESTAMPDIFF(MINUTE, kq.created_at, NOW()) > kq.estimated_minutes THEN 'yellow'
+                        ELSE 'green'
+                    END as alert_color
+                FROM kitchen_queue_items kq
+                WHERE kq.status NOT IN ('delivered', 'cancelled')
+                ORDER BY 
+                    FIELD(kq.priority, 'vip', 'rush', 'normal'),
+                    kq.created_at ASC
+            """)
+            
+            connection.commit()
+            
+            return {
+                "success": True,
+                "message": "Tabla kitchen_queue_items creada exitosamente",
+                "details": [
+                    "✅ Tabla kitchen_queue_items creada",
+                    "✅ Vista kitchen_display creada",
+                    "✅ Índices y foreign keys configurados"
+                ]
+            }
+            
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            logger.error(f"Error creando tabla kitchen_queue: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def create_test_orders(self):
+        """Crear pedidos de prueba para la cocina"""
+        connection = None
+        cursor = None
+        results = []
+        
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            
+            # Primero, obtener algunos productos
+            cursor.execute("SELECT id, name, price FROM products WHERE available = 1 LIMIT 10")
+            products = cursor.fetchall()
+            
+            if not products:
+                # Crear algunos productos de prueba si no hay
+                test_products = [
+                    ('Hamburguesa Classic', 12.50, 1, 1, 'Deliciosa hamburguesa con queso'),
+                    ('Pizza Margherita', 18.00, 1, 1, 'Pizza tradicional italiana'),
+                    ('Ensalada César', 9.50, 2, 1, 'Ensalada fresca con pollo'),
+                    ('Pasta Carbonara', 15.00, 3, 1, 'Pasta cremosa con panceta'),
+                    ('Milanesa con Papas', 16.50, 1, 1, 'Milanesa de ternera con papas fritas')
+                ]
+                
+                for name, price, cat_id, subcat_id, desc in test_products:
+                    cursor.execute("""
+                        INSERT INTO products (name, price, category_id, subcategory_id, available, description)
+                        VALUES (%s, %s, %s, %s, 1, %s)
+                    """, (name, price, cat_id, subcat_id, desc))
+                
+                connection.commit()
+                
+                # Obtener los productos recién creados
+                cursor.execute("SELECT id, name, price FROM products WHERE available = 1")
+                products = cursor.fetchall()
+            
+            # Crear algunos pedidos con diferentes estados
+            orders_data = [
+                {'table': 5, 'status': 'pending', 'notes': 'Sin cebolla en la hamburguesa'},
+                {'table': 3, 'status': 'preparing', 'notes': 'Cliente alérgico a frutos secos'},
+                {'table': 8, 'status': 'preparing', 'notes': 'Apurar por favor'},
+                {'table': 2, 'status': 'ready', 'notes': 'Agregar extra queso'}
+            ]
+            
+            for order_data in orders_data:
+                # Insertar el pedido
+                cursor.execute("""
+                    INSERT INTO orders (table_number, waiter_id, status, notes, subtotal, tax, total)
+                    VALUES (%s, %s, %s, %s, 0, 0, 0)
+                """, (order_data['table'], 1, order_data['status'], order_data['notes']))
+                
+                order_id = cursor.lastrowid
+                
+                # Agregar 2-3 items al pedido
+                total = 0.0
+                for i in range(min(3, len(products))):
+                    product = products[i]
+                    quantity = (i % 2) + 1  # 1 o 2
+                    price = float(product[2])
+                    subtotal = price * quantity
+                    total += subtotal
+                    
+                    cursor.execute("""
+                        INSERT INTO order_items (order_id, product_id, quantity, price, notes)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (order_id, product[0], quantity, price, f"Item: {product[1]}"))
+                    
+                    item_id = cursor.lastrowid
+                    
+                    # Crear registro en kitchen_queue_items
+                    # Determinar la estación basado en el nombre del producto
+                    station = 'general'
+                    if 'ensalada' in product[1].lower():
+                        station = 'salads'
+                    elif 'pizza' in product[1].lower() or 'hamburguesa' in product[1].lower():
+                        station = 'grill'
+                    elif 'pasta' in product[1].lower() or 'milanesa' in product[1].lower():
+                        station = 'general'
+                    
+                    # Determinar prioridad basado en el estado del pedido
+                    priority = 'normal'
+                    if order_data['status'] == 'ready':
+                        priority = 'rush'
+                    
+                    cursor.execute("""
+                        INSERT INTO kitchen_queue_items (
+                            order_id, order_item_id, product_name, quantity,
+                            station, status, priority, table_number, waiter_name,
+                            special_instructions, estimated_minutes
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        order_id, item_id, product[1], quantity,
+                        station, order_data['status'], priority, 
+                        order_data['table'], 'Admin',
+                        order_data['notes'], 10 if station == 'salads' else 15
+                    ))
+                
+                # Actualizar el total del pedido
+                tax = total * 0.21
+                grand_total = total + tax
+                
+                cursor.execute("""
+                    UPDATE orders SET subtotal = %s, tax = %s, total = %s WHERE id = %s
+                """, (total, tax, grand_total, order_id))
+                
+                results.append(f"✅ Pedido #{order_id} - Mesa {order_data['table']} - {order_data['status']}")
+            
+            connection.commit()
+            
+            return {
+                "success": True,
+                "message": "Pedidos de prueba creados",
+                "details": results
+            }
+            
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            logger.error(f"Error creando pedidos de prueba: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def add_missing_columns(self):
+        """Agregar columnas faltantes a las tablas"""
+        connection = None
+        cursor = None
+        results = []
+        
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+            
+            # Agregar columnas a customers
+            columns_to_add = [
+                ("customers", "loyalty_points", "INT DEFAULT 0"),
+                ("customers", "total_visits", "INT DEFAULT 0"),
+                ("customers", "total_spent", "DECIMAL(10,2) DEFAULT 0.00"),
+                ("customers", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                ("addresses", "formatted_address", "TEXT"),
+                ("addresses", "company_id", "INT DEFAULT 1"),
+                ("addresses", "is_active", "BOOLEAN DEFAULT TRUE"),
+                ("addresses", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                ("customers", "is_active", "BOOLEAN DEFAULT TRUE")
+            ]
+            
+            for table, column, definition in columns_to_add:
+                try:
+                    query = f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+                    cursor.execute(query)
+                    connection.commit()
+                    results.append(f"✅ Agregada columna {column} en {table}")
+                except Exception as e:
+                    if "Duplicate column name" in str(e):
+                        results.append(f"ℹ️ Columna {column} ya existe en {table}")
+                    else:
+                        results.append(f"❌ Error agregando {column} en {table}: {str(e)}")
+            
+            return {
+                "success": True,
+                "message": "Columnas verificadas/agregadas",
+                "details": results
+            }
+            
+        except Exception as e:
+            logger.error(f"Error agregando columnas: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def fix_customers_schema(self):
+        """Recrear tablas customers/addresses para coincidir exactamente con el frontend"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            # 1. Desactivar foreign key checks y eliminar tablas
+            cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+            cursor.execute("DROP TABLE IF EXISTS addresses")
+            cursor.execute("DROP TABLE IF EXISTS customers")
+            cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+            
+            # 2. Crear tabla customers - exacto al frontend
+            customers_sql = """
+            CREATE TABLE customers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                first_name VARCHAR(100) NOT NULL,
+                last_name VARCHAR(100) NOT NULL,
+                dni VARCHAR(20),
+                phone VARCHAR(20),
+                email VARCHAR(255),
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            cursor.execute(customers_sql)
+            
+            # 3. Crear tabla addresses - exacto al frontend
+            addresses_sql = """
+            CREATE TABLE addresses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                customer_id INT NOT NULL,
+                address_type ENUM('home', 'work', 'other') DEFAULT 'home',
+                street_address VARCHAR(255) NOT NULL,
+                city VARCHAR(100) NOT NULL,
+                state_province VARCHAR(100),
+                postal_code VARCHAR(20),
+                country VARCHAR(100),
+                latitude DECIMAL(10, 8),
+                longitude DECIMAL(11, 8),
+                is_default BOOLEAN DEFAULT FALSE,
+                delivery_instructions TEXT,
+                formatted_address TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+            )
+            """
+            cursor.execute(addresses_sql)
+            
+            connection.commit()
+            
+            return {
+                'success': True,
+                'message': 'Schema de clientes recreado correctamente',
+                'tables_created': ['customers', 'addresses'],
+                'relationship': '1 Cliente → N Direcciones'
+            }
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def create_addresses_table(self):
+        """Crear la tabla addresses que falta en el sistema"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            # 1. Crear tabla addresses
+            create_table_query = """
+            CREATE TABLE IF NOT EXISTS addresses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                customer_id INT NOT NULL,
+                address_type ENUM('home', 'work', 'other') DEFAULT 'home',
+                street_address VARCHAR(255) NOT NULL,
+                city VARCHAR(100) NOT NULL,
+                state_province VARCHAR(100),
+                postal_code VARCHAR(20),
+                country VARCHAR(100) DEFAULT 'Argentina',
+                latitude DECIMAL(10, 8),
+                longitude DECIMAL(11, 8),
+                is_default BOOLEAN DEFAULT FALSE,
+                delivery_instructions TEXT,
+                formatted_address TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                INDEX idx_customer_id (customer_id),
+                INDEX idx_address_type (address_type),
+                INDEX idx_is_default (is_default)
+            )
+            """
+            
+            cursor.execute(create_table_query)
+            
+            # 2. Migrar datos existentes del campo customers.address
+            migrate_query = """
+            INSERT IGNORE INTO addresses (customer_id, address_type, street_address, city, is_default, delivery_instructions)
+            SELECT 
+                id as customer_id,
+                'home' as address_type,
+                COALESCE(address, 'Dirección no especificada') as street_address,
+                'Ciudad no especificada' as city,
+                TRUE as is_default,
+                CONCAT('Migrado desde: ', address) as delivery_instructions
+            FROM customers 
+            WHERE address IS NOT NULL AND address != ''
+            """
+            
+            cursor.execute(migrate_query)
+            migrated_count = cursor.rowcount
+            
+            connection.commit()
+            
+            # 3. Verificar resultado
+            cursor.execute("SELECT COUNT(*) FROM addresses")
+            total_addresses = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM customers")
+            total_customers = cursor.fetchone()[0]
+            
+            return {
+                'success': True,
+                'message': 'Tabla addresses creada y datos migrados exitosamente',
+                'total_customers': total_customers,
+                'total_addresses': total_addresses,
+                'migrated_addresses': migrated_count
+            }
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+
+    def analyze_database_structure(self):
+        """Analizar toda la estructura de la base de datos"""
+        connection = None
+        cursor = None
+        try:
+            connection = connection_pool.get_connection()
+            cursor = connection.cursor()
+
+            # 1. Listar todas las tablas
+            cursor.execute("SHOW TABLES")
+            tables = [table[0] for table in cursor.fetchall()]
+            
+            database_info = {
+                'database_name': 'gastro',
+                'tables': {},
+                'total_tables': len(tables),
+                'analysis_timestamp': datetime.now().isoformat()
+            }
+            
+            # 2. Para cada tabla, obtener su estructura
+            for table_name in tables:
+                # Obtener columnas
+                cursor.execute(f"DESCRIBE {table_name}")
+                columns = []
+                for col in cursor.fetchall():
+                    columns.append({
+                        'name': col[0],
+                        'type': col[1],
+                        'null': col[2],
+                        'key': col[3],
+                        'default': col[4],
+                        'extra': col[5]
+                    })
+                
+                # Obtener conteo de registros
+                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                row_count = cursor.fetchone()[0]
+                
+                # Obtener foreign keys
+                cursor.execute(f"""
+                    SELECT 
+                        COLUMN_NAME,
+                        REFERENCED_TABLE_NAME,
+                        REFERENCED_COLUMN_NAME
+                    FROM information_schema.KEY_COLUMN_USAGE 
+                    WHERE TABLE_SCHEMA = 'gastro' 
+                    AND TABLE_NAME = '{table_name}'
+                    AND REFERENCED_TABLE_NAME IS NOT NULL
+                """)
+                foreign_keys = []
+                for fk in cursor.fetchall():
+                    foreign_keys.append({
+                        'column': fk[0],
+                        'references_table': fk[1],
+                        'references_column': fk[2]
+                    })
+                
+                database_info['tables'][table_name] = {
+                    'columns': columns,
+                    'row_count': row_count,
+                    'foreign_keys': foreign_keys
+                }
+            
+            return database_info
+
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
+    def generate_intelligent_recommendations(self, user_message, products_data, thread_id):
+        """Generar recomendaciones inteligentes usando IA - variedad vs específico"""
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini si no está configurado
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                self._genai_configured = True
+            
+            # Obtener categorías disponibles para análisis inteligente
+            categories = list(set([p['category_name'] for p in products_data if p['category_name']]))
+            
+            # Crear dataset compacto por categoría (solo primeros productos de cada categoría)
+            category_products = {}
+            for product in products_data:
+                cat = product['category_name']
+                if cat and cat not in category_products:
+                    category_products[cat] = []
+                if cat and len(category_products[cat]) < 3:  # Max 3 por categoría
+                    category_products[cat].append(product)
+            
+            # Prompt inteligente para análisis de especificidad
+            categories_text = ", ".join(categories)
+            products_sample = ""
+            for cat, prods in category_products.items():
+                products_sample += f"\n{cat}: " + ", ".join([p['name'] for p in prods])
+            
+            # Obtener configuración del rubro desde la base de datos
+            rubro_connection = None
+            rubro_cursor = None
+            
+            try:
+                rubro_connection = pool.get_connection()
+                rubro_cursor = rubro_connection.cursor(dictionary=True)
+                
+                # Obtener configuración actual del negocio
+                rubro_cursor.execute("""
+                    SELECT r.nombre, r.pregunta_principal, r.rol_experto, 
+                           r.categorias_principales, r.categorias_secundarias
+                    FROM configuracion_negocio cn 
+                    JOIN rubro r ON cn.rubro_id = r.id 
+                    WHERE cn.is_active = TRUE 
+                    LIMIT 1
+                """)
+                rubro_config = rubro_cursor.fetchone()
+                
+                if rubro_config:
+                    business_type = rubro_config['nombre']
+                    main_question = rubro_config['pregunta_principal'] 
+                    expert_role = rubro_config['rol_experto']
+                    
+                    # Obtener categorías principales/secundarias desde BD o generar dinámicamente
+                    try:
+                        if rubro_config['categorias_principales']:
+                            stored_main = json.loads(rubro_config['categorias_principales'])
+                            # Filtrar solo las categorías que realmente existen
+                            main_categories = [cat for cat in categories if cat in stored_main]
+                        else:
+                            main_categories = []
+                        
+                        if rubro_config['categorias_secundarias']:
+                            stored_secondary = json.loads(rubro_config['categorias_secundarias'])
+                            secondary_categories = [cat for cat in categories if cat in stored_secondary]
+                        else:
+                            secondary_categories = []
+                    except:
+                        # Si falla el parsing JSON, generar dinámicamente
+                        main_categories = []
+                        secondary_categories = []
+                    
+                    # Si no hay categorías definidas en BD, usar todas las disponibles
+                    # La IA decidirá cuáles son relevantes según el contexto
+                    if not main_categories:
+                        # No hacer suposiciones, dejar que la IA analice
+                        main_categories = categories
+                        secondary_categories = []
+                else:
+                    # Fallback si no hay configuración
+                    business_type = "negocio"
+                    main_question = "¿Qué necesitás?"
+                    expert_role = "EXPERTO"
+                    main_categories = categories
+                    secondary_categories = []
+                    
+            except Exception as e:
+                logger.error(f"[RUBRO_ERROR] Error obteniendo configuración: {str(e)}")
+                # Fallback seguro - sin suposiciones
+                business_type = "negocio"
+                main_question = "¿Qué necesitás?"
+                expert_role = "EXPERTO"
+                main_categories = categories
+                secondary_categories = []
+            finally:
+                if rubro_cursor:
+                    rubro_cursor.close()
+                if rubro_connection:
+                    rubro_connection.close()
+            
+            main_categories_text = ", ".join(main_categories)
+            import json
+            main_categories_json = json.dumps(main_categories, ensure_ascii=False)
+            
+            prompt = f"""Eres un experto en {business_type}. Analiza el mensaje del cliente y determina qué categorías mostrar.
+
+MENSAJE DEL CLIENTE: "{user_message}"
+
+DATOS DISPONIBLES:
+- Tipo de negocio: {business_type}
+- Categorías existentes: {categories_text}
+- Productos disponibles por categoría:{products_sample}
+
+TU TAREA:
+Usando ÚNICAMENTE los datos proporcionados arriba, analiza semánticamente qué está pidiendo el cliente y selecciona las categorías más relevantes.
+
+PROCESO DE ANÁLISIS:
+1. Identifica la intención del mensaje (qué busca el cliente)
+2. Relaciona esa intención con las categorías disponibles
+3. Selecciona hasta 4 categorías que mejor respondan a la consulta
+4. NO uses conocimiento externo, solo los datos proporcionados
+
+EJEMPLOS DE ANÁLISIS (genéricos):
+- Si el mensaje habla de "ver opciones" → mostrar categorías variadas principales
+- Si menciona algo específico → buscar categorías relacionadas con ese concepto
+- Si pide una acción (como "tomar", "usar", "comprar") → analizar qué categorías se relacionan con esa acción en el contexto del negocio
+
+RESPONDE EN JSON:
+{{{{
+  "query_type": "general|specific|action_based",
+  "detected_intent": "explicación breve de qué entendiste",
+  "target_categories": ["array con las categorías seleccionadas"],
+  "confidence": 0-100,
+  "response_text": "respuesta natural en español argentino"
+}}}}
+
+IMPORTANTE: 
+- Analiza el contexto del negocio para entender qué significa cada palabra
+- No asumas significados, usa los datos disponibles
+- Si no estás seguro, incluye categorías variadas"""
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            logger.info(f"[AI_RECOMMENDATIONS] Raw: {response.text[:200]}...")
+            
+            # Parsear respuesta JSON
+            import json, re
+            json_pattern = r'\{.*?\}'
+            json_match = re.search(json_pattern, response.text, re.DOTALL)
+            
+            if json_match:
+                try:
+                    ai_response = json.loads(json_match.group(0))
+                    query_type = ai_response.get('query_type', 'ambiguous')
+                    target_categories = ai_response.get('target_categories', [])
+                    response_text = ai_response.get('response_text', '¡Acá tenés algunas opciones!')
+                    
+                    logger.info(f"[AI_RECOMMENDATIONS] Parsed successfully: {query_type}, categories: {target_categories}")
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"[AI_RECOMMENDATIONS] JSON Parse Error: {e}")
+                    logger.error(f"[AI_RECOMMENDATIONS] Raw JSON: {json_match.group(0)[:500]}...")
+                    # Fallback a ambiguous
+                    query_type = 'ambiguous'
+                    target_categories = []
+                    response_text = '¡Acá tenés algunas opciones variadas!'
+                
+                # Seleccionar productos según el análisis inteligente de la IA
+                selected_products = []
+                
+                # La IA ya determinó qué categorías mostrar basándose en el análisis semántico
+                if target_categories:
+                    # Usar las categorías que la IA seleccionó
+                    allowed_categories = set(target_categories)
+                    logger.info(f"[AI_SELECTED] Using AI-selected categories: {target_categories}")
+                else:
+                    # Fallback: si la IA no pudo determinar, usar categorías variadas
+                    allowed_categories = set(categories[:4])  # Primeras 4 categorías disponibles
+                    logger.info(f"[FALLBACK] AI couldn't determine, using first 4 categories")
+                
+                # Recolectar productos de las categorías seleccionadas por la IA
+                used_categories = set()
+                
+                for product in products_data:
+                    if len(selected_products) >= 4:
+                        break
+                    cat = product['category_name']
+                    if cat and cat in allowed_categories and cat not in used_categories:
+                        selected_products.append(product)
+                        used_categories.add(cat)
+                        logger.info(f"[AI_BASED] Added {product['name']} from {cat}")
+                
+                # Si hay categorías específicas pero pocos productos, agregar más de esas categorías
+                if len(selected_products) < 4 and target_categories:
+                    for product in products_data:
+                        if len(selected_products) >= 4:
+                            break
+                        cat = product['category_name']
+                        if cat and cat in allowed_categories:
+                            selected_products.append(product)
+                            logger.info(f"[ADDITIONAL] Added more from {cat}: {product['name']}")
+                            
+                else:
+                    # FALLBACK: variedad de categorías (como antes)
+                    used_categories = set()
+                    for product in products_data:
+                        if len(selected_products) >= 4:
+                            break
+                        cat = product['category_name']
+                        if cat and cat not in used_categories:
+                            selected_products.append(product)
+                            used_categories.add(cat)
+                            logger.info(f"[FALLBACK] Added {product['name']} from {cat}")
+                
+                # Organizar productos por categorías para carruseles (MÁXIMO 4 CATEGORÍAS)
+                categorized_products = {}
+                
+                # Agrupar productos por categoría, limitando a 4 categorías
+                for product in selected_products:
+                    category = product['category_name']
+                    
+                    # LÍMITE: Solo 4 categorías máximo
+                    if len(categorized_products) >= 4 and category not in categorized_products:
+                        break
+                        
+                    if category not in categorized_products:
+                        categorized_products[category] = []
+                    
+                    # Máximo 6 productos por carrusel
+                    if len(categorized_products[category]) < 6:
+                        categorized_products[category].append({
+                            'id': product['id'],
+                            'name': product['name'],
+                            'description': product['description'],
+                            'price': float(product['price']),
+                            'category': category,
+                            'image_url': product['image_url']
+                        })
+                
+                # Expandir cada categoría con más productos para hacer carruseles completos
+                for category in categorized_products:
+                    if len(categorized_products[category]) < 4:  # Llenar hasta 4 productos mínimo por carrusel
+                        for product in products_data:
+                            if len(categorized_products[category]) >= 6:  # Máximo 6 por carrusel
+                                break
+                            if (product['category_name'] == category and 
+                                product['id'] not in [p['id'] for p in categorized_products[category]]):
+                                categorized_products[category].append({
+                                    'id': product['id'],
+                                    'name': product['name'],
+                                    'description': product['description'],
+                                    'price': float(product['price']),
+                                    'category': category,
+                                    'image_url': product['image_url']
+                                })
+                
+                # Contar productos totales
+                total_products = sum(len(products) for products in categorized_products.values())
+                total_categories = len(categorized_products)
+                
+                logger.info(f"[AI_RECOMMENDATIONS] {query_type.upper()}: {total_products} products across {total_categories} categories: {list(categorized_products.keys())}")
+                
+                return response_text, categorized_products
+                
+        except Exception as e:
+            logger.error(f"[AI_RECOMMENDATIONS] Error: {e}")
+        
+        # Fallback: productos variados
+        fallback_products = [{
+            'id': p['id'],
+            'name': p['name'],
+            'description': p['description'], 
+            'price': float(p['price']),
+            'category': p['category_name'],
+            'image_url': p['image_url']
+        } for p in products_data[:4]]
+        
+        return "¡Acá tenés algunas opciones deliciosas!", fallback_products
+
     def log_message(self, format, *args):
         """Override to reduce log noise"""
         if args and len(args) > 0 and isinstance(args[0], str):

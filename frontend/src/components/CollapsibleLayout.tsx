@@ -18,7 +18,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   BuildingOffice2Icon,
-  CogIcon
+  CogIcon,
+  UserGroupIcon,
+  ChartPieIcon,
+  QrCodeIcon
 } from '@heroicons/react/24/outline';
 
 interface MenuItem {
@@ -35,8 +38,12 @@ const menuItems: MenuItem[] = [
   { name: 'Nueva Orden', path: '/orders/new', icon: ShoppingCartIcon, color: '#FFD93D', translationKey: 'menu.newOrder' },
   { name: 'POS', path: '/pos', icon: CreditCardIcon, color: '#6BCF7F', translationKey: 'menu.pos' },
   { name: 'Cocina', path: '/kitchen', icon: ChefHatIcon, color: '#FF8C42', translationKey: 'menu.kitchen' },
+  { name: 'Cocina Drag', path: '/kitchen-drag', icon: ChefHatIcon, color: '#10B981', translationKey: 'menu.kitchenDrag' },
   { name: 'Productos', path: '/products', icon: CubeIcon, color: '#A8E6CF', translationKey: 'menu.products' },
-  { name: 'Reportes', path: '/reports', icon: ChartBarIcon, color: '#C7A8FF', translationKey: 'menu.reports' },
+  { name: 'Clientes', path: '/customers', icon: UserGroupIcon, color: '#9333EA', translationKey: 'menu.customers' },
+  { name: 'Menú QR', path: '/qr-manager', icon: QrCodeIcon, color: '#EC4899', translationKey: 'menu.qrMenu' },
+  { name: 'Analytics IA', path: '/analytics', icon: ChartPieIcon, color: '#3B82F6', translationKey: 'menu.analytics' },
+  // { name: 'Reportes', path: '/reports', icon: ChartBarIcon, color: '#C7A8FF', translationKey: 'menu.reports' },
   { name: 'Empresas', path: '/companies', icon: BuildingOffice2Icon, color: '#8B5CF6', translationKey: 'menu.companies' },
   { name: 'Configuración', path: '/settings', icon: CogIcon, color: '#6B7280', translationKey: 'menu.settings' },
 ];
@@ -271,7 +278,7 @@ export const CollapsibleLayout: React.FC<{ children: React.ReactNode }> = ({ chi
           </button>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-hidden flex flex-col p-6">
+          <main className="flex-1 overflow-hidden flex flex-col">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}
@@ -279,7 +286,7 @@ export const CollapsibleLayout: React.FC<{ children: React.ReactNode }> = ({ chi
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className="flex-1 flex flex-col overflow-hidden"
+                className="flex-1 flex flex-col h-full"
               >
                 {children}
               </motion.div>

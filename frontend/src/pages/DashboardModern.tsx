@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel, AnimatedCard, GradientText } from '../components/AnimatedComponents';
 import {
@@ -30,6 +31,7 @@ interface StatCard {
 
 export const DashboardModern: React.FC = () => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export const DashboardModern: React.FC = () => {
 
   const stats: StatCard[] = [
     {
-      title: 'Today\'s Revenue',
+      title: t('pages.dashboard.todaysRevenue'),
       value: '$4,238',
       change: 12.5,
       icon: CurrencyDollarIcon,
@@ -47,7 +49,7 @@ export const DashboardModern: React.FC = () => {
       trend: 'up'
     },
     {
-      title: 'Active Orders',
+      title: t('pages.dashboard.activeOrders'),
       value: 18,
       change: -5.2,
       icon: ShoppingCartIcon,
@@ -55,7 +57,7 @@ export const DashboardModern: React.FC = () => {
       trend: 'down'
     },
     {
-      title: 'Customers Today',
+      title: t('pages.dashboard.customers'),
       value: 142,
       change: 8.7,
       icon: UserGroupIcon,
@@ -63,8 +65,8 @@ export const DashboardModern: React.FC = () => {
       trend: 'up'
     },
     {
-      title: 'Avg. Order Time',
-      value: '24 min',
+      title: t('pages.dashboard.avgOrderTime'),
+      value: `24 ${t('pages.dashboard.min')}`,
       change: -15.3,
       icon: ClockIcon,
       color: theme.colors.accent,
@@ -106,15 +108,24 @@ export const DashboardModern: React.FC = () => {
     }
   };
 
+  const getStatusTranslation = (status: string) => {
+    switch (status) {
+      case 'preparing': return t('pages.dashboard.inProgress');
+      case 'ready': return 'Listo';
+      case 'delivered': return 'Entregado';
+      default: return t('pages.dashboard.pending');
+    }
+  };
+
   return (
-    <div>
+    <div className="h-full overflow-y-auto">
       {/* Page Header with Actions */}
       <PageHeader
-        title="Dashboard"
+        title={t('pages.dashboard.title')}
         subtitle={currentTime.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' }) + ' • ' + currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
         actions={[
           {
-            label: 'Ver Reportes',
+            label: t('pages.dashboard.viewAll'),
             onClick: () => console.log('Ver reportes'),
             variant: 'primary',
             icon: ChartBarIcon
@@ -192,7 +203,7 @@ export const DashboardModern: React.FC = () => {
         <GlassPanel className="lg:col-span-2" delay={0.4}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold" style={{ color: theme.colors.text }}>
-              Recent Orders
+              {t('pages.dashboard.recentOrders')}
             </h2>
             <motion.button
               className="text-sm font-medium"
@@ -200,7 +211,7 @@ export const DashboardModern: React.FC = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              View All →
+              {t('pages.dashboard.viewAll')} →
             </motion.button>
           </div>
 
@@ -230,7 +241,7 @@ export const DashboardModern: React.FC = () => {
                     </div>
                     <div>
                       <p className="font-medium" style={{ color: theme.colors.text }}>
-                        Order #{order.id} - Table {order.table}
+                        Orden #{order.id} - {t('pages.dashboard.table')} {order.table}
                       </p>
                       <p className="text-sm" style={{ color: theme.colors.textMuted }}>
                         {order.items} items • {order.time}
@@ -248,7 +259,7 @@ export const DashboardModern: React.FC = () => {
                         color: getStatusColor(order.status)
                       }}
                     >
-                      {order.status}
+                      {getStatusTranslation(order.status)}
                     </span>
                   </div>
                 </motion.div>
@@ -261,7 +272,7 @@ export const DashboardModern: React.FC = () => {
         <GlassPanel delay={0.6}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold" style={{ color: theme.colors.text }}>
-              Top Items Today
+              {t('pages.dashboard.topProducts')}
             </h2>
             <ChartBarIcon className="h-5 w-5" style={{ color: theme.colors.primary }} />
           </div>

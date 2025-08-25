@@ -411,96 +411,96 @@ export const NewOrderWithCache: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
               {/* Panel Principal - Productos */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className="lg:col-span-2 space-y-4">
 
-                {/* Selección de Mesa y Cliente */}
-                <GlassPanel delay={0.1}>
-                  <h2 className="text-lg font-medium mb-4" style={{ color: theme.colors.text }}>
-                    {t('orders.tableAndCustomer')}
-                  </h2>
+                {/* Selección de Mesa y Cliente - Sticky y compacto */}
+                <div className="sticky top-20" style={{ zIndex: 5 }}>
+                  <GlassPanel delay={0.1}>
+                    <div className="p-3">
+                      <h2 className="text-sm font-medium mb-2" style={{ color: theme.colors.text }}>
+                        {t('orders.tableAndCustomer')}
+                      </h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textMuted }}>
-                        {t('orders.table')}
-                      </label>
-                      <select
-                        value={selectedTable?.id || ''}
-                        onChange={(e) => {
-                          const table = tables.find(t => t.id === parseInt(e.target.value));
-                          setSelectedTable(table || null);
-                        }}
-                        className="block w-full rounded-lg px-4 py-2"
-                        style={{
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.border,
-                          color: theme.colors.text
-                        }}
-                      >
-                        <option value="">Seleccionar mesa...</option>
-                        {tables.filter(table => table.status === 'available').map((table) => (
-                          <option key={table.id} value={table.id}>
-                            Mesa {table.number} - {table.location} ({table.capacity} personas)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
 
-                    <div className="relative">
-                      <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textMuted }}>
-                        {t('orders.customer')}
-                      </label>
-                      <div className="relative">
-                        <UserIcon className="absolute left-3 top-3 h-5 w-5" style={{ color: theme.colors.textMuted }} />
-                        <input
-                          type="text"
-                          value={customerSearch}
-                          onChange={(e) => setCustomerSearch(e.target.value)}
-                          onFocus={() => setShowCustomerDropdown(true)}
-                          className="block w-full pl-10 pr-4 py-2 rounded-lg"
-                          style={{
-                            backgroundColor: theme.colors.surface,
-                            borderColor: theme.colors.border,
-                            color: theme.colors.text
-                          }}
-                          placeholder="Buscar cliente..."
-                        />
+                          <select
+                            value={selectedTable?.id || ''}
+                            onChange={(e) => {
+                              const table = tables.find(t => t.id === parseInt(e.target.value));
+                              setSelectedTable(table || null);
+                            }}
+                            className="block w-full rounded-lg px-3 py-1.5 text-sm"
+                            style={{
+                              backgroundColor: theme.colors.surface,
+                              borderColor: theme.colors.border,
+                              color: theme.colors.text
+                            }}
+                          >
+                            <option value="">Seleccionar mesa...</option>
+                            {tables.filter(table => table.status === 'available').map((table) => (
+                              <option key={table.id} value={table.id}>
+                                Mesa {table.number} - {table.location} ({table.capacity} personas)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                        <AnimatePresence>
-                          {showCustomerDropdown && customers.length > 0 && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
-                              className="absolute z-10 w-full mt-1 rounded-lg shadow-lg overflow-hidden"
-                              style={{ backgroundColor: theme.colors.surface }}
-                            >
-                              {customers.map((customer) => (
-                                <motion.button
-                                  key={customer.id}
-                                  onClick={() => {
-                                    setSelectedCustomer(customer);
-                                    setCustomerSearch(customer.name);
-                                    setShowCustomerDropdown(false);
-                                    toast.info(`Cliente: ${customer.name}`, { autoClose: 1500 });
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-opacity-10"
-                                  style={{ color: theme.colors.text }}
-                                  whileHover={{ backgroundColor: theme.colors.primaryLight + '20' }}
+                        <div className="relative">
+
+                          <div className="relative">
+                            <UserIcon className="absolute left-2 top-2 h-4 w-4" style={{ color: theme.colors.textMuted }} />
+                            <input
+                              type="text"
+                              value={customerSearch}
+                              onChange={(e) => setCustomerSearch(e.target.value)}
+                              onFocus={() => setShowCustomerDropdown(true)}
+                              className="block w-full pl-8 pr-3 py-1.5 rounded-lg text-sm"
+                              style={{
+                                backgroundColor: theme.colors.surface,
+                                borderColor: theme.colors.border,
+                                color: theme.colors.text
+                              }}
+                              placeholder="Buscar cliente..."
+                            />
+
+                            <AnimatePresence>
+                              {showCustomerDropdown && customers.length > 0 && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -10 }}
+                                  className="absolute z-10 w-full mt-1 rounded-lg shadow-lg overflow-hidden max-h-32 overflow-y-auto"
+                                  style={{ backgroundColor: theme.colors.surface }}
                                 >
-                                  <div className="font-medium">{customer.name}</div>
-                                  <div className="text-sm" style={{ color: theme.colors.textMuted }}>
-                                    {customer.email} - {customer.phone}
-                                  </div>
-                                </motion.button>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                                  {customers.map((customer) => (
+                                    <motion.button
+                                      key={customer.id}
+                                      onClick={() => {
+                                        setSelectedCustomer(customer);
+                                        setCustomerSearch(customer.name);
+                                        setShowCustomerDropdown(false);
+                                        toast.info(`Cliente: ${customer.name}`, { autoClose: 1500 });
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-opacity-10 text-sm"
+                                      style={{ color: theme.colors.text }}
+                                      whileHover={{ backgroundColor: theme.colors.primaryLight + '20' }}
+                                    >
+                                      <div className="font-medium text-sm">{customer.name}</div>
+                                      <div className="text-xs" style={{ color: theme.colors.textMuted }}>
+                                        {customer.email} - {customer.phone}
+                                      </div>
+                                    </motion.button>
+                                  ))}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </GlassPanel>
+                  </GlassPanel>
+                </div>
 
                 {/* Productos */}
                 <GlassPanel delay={0.2}>
@@ -659,15 +659,15 @@ export const NewOrderWithCache: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Categorías - SOLO mostrar cuando NO sea "Ver Todos" */}
+                    {/* Categorías - Siempre en una línea */}
                     {selectedCategory !== 'all' && (
                       <div className="mb-6">
                         <div
-                          className="grid gap-2 grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-6"
+                          className="flex gap-1"
                           style={{
-                            maxHeight: '108px',
-                            gridTemplateRows: categories.length > 6 ? 'repeat(2, 50px)' : '50px',
-                            overflow: 'hidden'
+                            display: 'flex',
+                            flexWrap: 'nowrap',
+                            width: '100%'
                           }}
                         >
                           {loading ? (
@@ -709,23 +709,25 @@ export const NewOrderWithCache: React.FC = () => {
                                     setSelectedCategory(category.id);
                                     setSelectedSubcategory('all');
                                   }}
-                                  className="rounded-lg font-medium flex items-center justify-center gap-1 min-w-0 text-xs"
+                                  className="rounded-lg font-medium flex items-center justify-center gap-1"
                                   style={{
                                     backgroundColor: selectedCategory === category.id ? category.color : theme.colors.surface,
                                     color: selectedCategory === category.id ? 'white' : theme.colors.text,
                                     border: `2px solid ${selectedCategory === category.id ? category.color : theme.colors.border}`,
-                                    height: '48px',
-                                    padding: '4px 8px',
-                                    minHeight: '48px',
-                                    maxHeight: '48px'
+                                    height: '40px',
+                                    padding: '4px 6px',
+                                    flex: '1 1 0',
+                                    minWidth: '0',
+                                    overflow: 'hidden',
+                                    fontSize: categories.length > 10 ? '10px' : '12px'
                                   }}
                                   whileHover={{ scale: 1.02 }}
                                   whileTap={{ scale: 0.98 }}
-                                  title={category.name} // Tooltip para mostrar nombre completo
+                                  title={category.name}
                                 >
-                                  {category.icon && <CategoryIcon icon={category.icon} size="sm" />}
-                                  <span className="leading-tight font-semibold">
-                                    {truncateText(category.name, 8)}
+                                  {category.icon && <CategoryIcon icon={category.icon} size={categories.length > 10 ? "xs" : "sm"} />}
+                                  <span className="truncate font-semibold" style={{ maxWidth: '100%' }}>
+                                    {categories.length > 8 ? truncateText(category.name, 6) : category.name}
                                   </span>
                                 </motion.button>
                               );
@@ -785,8 +787,8 @@ export const NewOrderWithCache: React.FC = () => {
                         />
                       </div>
                     ) : filteredProducts.length > 0 ? (
-                      <div className="overflow-y-auto pb-6" style={{ maxHeight: 'calc(100vh - 28rem)' }}>
-                        <AnimatedList className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 28rem)', paddingBottom: '100px' }}>
+                        <AnimatedList className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-8">
                           {filteredProducts.map((product, index) => (
                             <AnimatedCard
                               key={product.id}
@@ -907,10 +909,11 @@ export const NewOrderWithCache: React.FC = () => {
                 </GlassPanel>
               </div>
 
-              {/* Panel del Carrito */}
-              <div className="relative">
-                <GlassPanel delay={0.3} className="sticky top-20 flex flex-col" style={{ maxHeight: 'calc(100vh - 6rem)' }}>
-                  <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: theme.colors.border }}>
+              {/* Panel del Carrito - Simplificado */}
+              <div className="sticky top-20" style={{ height: 'calc(100vh - 10rem)', marginBottom: '2rem' }}>
+                <GlassPanel delay={0.3} className="h-full flex flex-col">
+                  {/* Header del carrito - fijo arriba */}
+                  <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: theme.colors.border, flexShrink: 0 }}>
                     <h2 className="text-lg font-medium flex items-center gap-2" style={{ color: theme.colors.text }}>
                       <ShoppingCartIcon className="h-5 w-5" style={{ color: theme.colors.primary }} />
                       {t('orders.cart')} ({cart.length})
@@ -952,8 +955,9 @@ export const NewOrderWithCache: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col flex-1 min-h-0">
-                      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                    <>
+                      {/* Lista de items - con scroll */}
+                      <div className="overflow-y-auto p-4 space-y-3" style={{ flex: '1 1 0', minHeight: 0, maxHeight: 'calc(100vh - 24.2rem)' }}>
                         <AnimatePresence>
                           {cart.map((item) => (
                             <motion.div
@@ -1042,40 +1046,41 @@ export const NewOrderWithCache: React.FC = () => {
                         </AnimatePresence>
                       </div>
 
-                      {/* Sección fija al fondo */}
-                      <div className="p-4 border-t flex-shrink-0" style={{
-                        borderColor: theme.colors.border,
-                        backgroundColor: theme.colors.background
-                      }}>
-                        <div className="space-y-2 mb-4">
-                          <div className="flex justify-between text-sm">
-                            <span style={{ color: theme.colors.textMuted }}>Subtotal</span>
-                            <span style={{ color: theme.colors.text }}>${cartSubtotal.toFixed(2)}</span>
+                      {/* Botón único con toda la información */}
+                      <motion.button
+                        onClick={submitOrder}
+                        className="w-full p-3 text-white font-bold rounded-lg relative"
+                        style={{
+                          backgroundColor: theme.colors.primary,
+                          flexShrink: 0,
+                          minHeight: '80px'
+                        }}
+                        whileHover={{ scale: 1.02, backgroundColor: theme.colors.primaryDark }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <div className="flex items-center justify-between">
+                          {/* Impuestos a la izquierda */}
+                          <div className="text-left">
+                            <div className="text-xs opacity-80">Subtotal: ${cartSubtotal.toFixed(2)}</div>
+                            <div className="text-xs opacity-80">IVA 21%: ${cartTax.toFixed(2)}</div>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span style={{ color: theme.colors.textMuted }}>IVA (21%)</span>
-                            <span style={{ color: theme.colors.text }}>${cartTax.toFixed(2)}</span>
+
+                          {/* Total centrado grande */}
+                          <div className="text-center flex-1">
+                            <div className="text-3xl font-bold">${cartTotal.toFixed(2)}</div>
+                            <div className="text-xs opacity-90 flex items-center justify-center gap-1">
+                              <ShoppingCartIcon className="h-4 w-4" />
+                              PROCESAR
+                            </div>
                           </div>
-                          <div className="flex justify-between text-lg font-bold">
-                            <span style={{ color: theme.colors.text }}>Total</span>
-                            <span style={{ color: theme.colors.primary }}>${cartTotal.toFixed(2)}</span>
+
+                          {/* Ícono a la derecha */}
+                          <div>
+                            <CreditCardIcon className="h-8 w-8 opacity-90" />
                           </div>
                         </div>
-
-                        <motion.button
-                          onClick={submitOrder}
-                          className="w-full py-4 text-white font-bold text-md flex items-center justify-center gap-3 transition-all rounded-lg"
-                          style={{
-                            backgroundColor: theme.colors.primary
-                          }}
-                          whileHover={{ scale: 1.02, backgroundColor: theme.colors.primaryDark }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <CreditCardIcon className="h-6 w-6" />
-                          Procesar Orden
-                        </motion.button>
-                      </div>
-                    </div>
+                      </motion.button>
+                    </>
                   )}
                 </GlassPanel>
               </div>

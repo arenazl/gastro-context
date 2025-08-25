@@ -5,7 +5,7 @@ import { TableLayoutDesigner } from '../components/TableLayoutDesigner';
 import { PageHeader } from '../components/PageHeader';
 import { toast } from 'react-toastify';
 import {
-  Grid3x3,
+  Grid,
   Map,
   Save,
   RefreshCw,
@@ -222,7 +222,7 @@ export const TablesVisual: React.FC = () => {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                <Grid3x3 className="h-5 w-5" />
+                <Grid className="h-5 w-5" />
                 Vista Cuadrícula
               </button>
             </div>

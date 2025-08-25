@@ -58,7 +58,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   const [editMode, setEditMode] = useState(!readOnly);
   const [backgroundOffsetY, setBackgroundOffsetY] = useState(50); // Offset inicial de 50px hacia abajo
   const [backgroundOffsetX, setBackgroundOffsetX] = useState(0); // Offset horizontal
-  
+
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const designAreaRef = useRef<HTMLDivElement>(null);
@@ -76,7 +76,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
       reader.onload = (e) => {
         const result = e.target?.result as string;
         setBackgroundImage(result);
-        
+
         // Guardar inmediatamente en localStorage
         const layoutSettings = {
           backgroundImage: result,
@@ -84,7 +84,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
           backgroundOffsetX: backgroundOffsetX
         };
         localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
-        
+
         toast.success('Imagen cargada y guardada correctamente');
       };
       reader.readAsDataURL(file);
@@ -94,7 +94,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   // Manejo de drag & drop
   const handleMouseDown = (e: React.MouseEvent, tableId: number) => {
     if (!editMode) return;
-    
+
     e.preventDefault();
     setIsDragging(true);
     setDraggedTable(tableId);
@@ -122,8 +122,8 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
       return showGrid ? Math.round(value / gridSize) * gridSize : value;
     };
 
-    setTables(prev => prev.map(table => 
-      table.id === draggedTable 
+    setTables(prev => prev.map(table =>
+      table.id === draggedTable
         ? { ...table, x: snapToGrid(x), y: snapToGrid(y) }
         : table
     ));
@@ -160,8 +160,8 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
 
   // Rotar mesa
   const rotateTable = (tableId: number, angle: number) => {
-    setTables(prev => prev.map(table => 
-      table.id === tableId 
+    setTables(prev => prev.map(table =>
+      table.id === tableId
         ? { ...table, rotation: ((table.rotation || 0) + angle) % 360 }
         : table
     ));
@@ -169,22 +169,22 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
 
   // Cambiar forma de mesa
   const changeTableShape = (tableId: number, shape: 'square' | 'circle' | 'rectangle') => {
-    setTables(prev => prev.map(table => 
-      table.id === tableId 
-        ? { 
-            ...table, 
-            shape,
-            width: shape === 'rectangle' ? 120 : 80,
-            height: shape === 'rectangle' ? 60 : 80
-          }
+    setTables(prev => prev.map(table =>
+      table.id === tableId
+        ? {
+          ...table,
+          shape,
+          width: shape === 'rectangle' ? 120 : 80,
+          height: shape === 'rectangle' ? 60 : 80
+        }
         : table
     ));
   };
 
   // Actualizar capacidad de mesa
   const updateTableCapacity = (tableId: number, capacity: number) => {
-    setTables(prev => prev.map(table => 
-      table.id === tableId 
+    setTables(prev => prev.map(table =>
+      table.id === tableId
         ? { ...table, capacity }
         : table
     ));
@@ -202,7 +202,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
         };
         localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
       }
-      
+
       // Guardar configuración del mapa en la base de datos
       const mapSettings = {
         map_x_position: backgroundOffsetX,
@@ -216,14 +216,14 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
         auto_save: true,
         company_id: 1
       };
-      
+
       // Guardar configuración del mapa
       await fetch(`${API_URL}/api/map-settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mapSettings)
       });
-      
+
       // Si hay un área seleccionada, guardar configuración del área
       // Por ahora usamos área 1 como default
       const areaId = 1; // TODO: Obtener área actual del contexto
@@ -236,13 +236,13 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
         background_color: '#F3F4F6',
         company_id: 1
       };
-      
+
       await fetch(`${API_URL}/api/area-settings/${areaId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(areaSettings)
       });
-      
+
       // Llamar a la función onSave original
       await onSave(tables, backgroundImage || undefined);
       toast.success('Layout y configuración guardados correctamente');
@@ -266,31 +266,31 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   // Ajustar zoom para que todo sea visible
   const fitToScreen = () => {
     if (!containerRef.current || tables.length === 0) return;
-    
+
     const containerRect = containerRef.current.getBoundingClientRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height - 60; // Restar altura de toolbar
-    
+
     // Encontrar los límites del contenido
     let maxX = 0;
     let maxY = 0;
-    
+
     tables.forEach(table => {
       const tableRight = table.x + (table.width || 80);
       const tableBottom = table.y + (table.height || 80);
       if (tableRight > maxX) maxX = tableRight;
       if (tableBottom > maxY) maxY = tableBottom;
     });
-    
+
     // Agregar padding
     maxX += 100;
     maxY += 100;
-    
+
     // Calcular el zoom necesario para que todo quepa
     const zoomX = containerWidth / maxX;
     const zoomY = containerHeight / maxY;
     const newZoom = Math.min(zoomX, zoomY, 1.5); // Máximo 150%
-    
+
     setZoom(Math.max(0.3, newZoom)); // Mínimo 30%
   };
 
@@ -320,7 +320,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
             }
           }
         }
-        
+
         // Cargar configuración del área
         const areaId = 1; // TODO: Obtener área actual del contexto
         const areaResponse = await fetch(`${API_URL}/api/area-settings/${areaId}?company_id=1`);
@@ -341,7 +341,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
             }
           }
         }
-        
+
         // También cargar desde localStorage para la imagen
         const savedLayout = localStorage.getItem('restaurant_layout');
         if (savedLayout) {
@@ -361,7 +361,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
         console.error('Error cargando configuración del layout:', error);
       }
     };
-    
+
     loadConfiguration();
   }, []);
 
@@ -395,9 +395,8 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
       >
         {/* Forma de la mesa */}
         <div
-          className={`w-full h-full flex flex-col items-center justify-center text-white font-bold shadow-lg transition-all ${
-            table.shape === 'circle' ? 'rounded-full' : table.shape === 'rectangle' ? 'rounded-lg' : 'rounded-lg'
-          }`}
+          className={`w-full h-full flex flex-col items-center justify-center text-white font-bold shadow-lg transition-all ${table.shape === 'circle' ? 'rounded-full' : table.shape === 'rectangle' ? 'rounded-lg' : 'rounded-lg'
+            }`}
           style={{
             backgroundColor: statusColors[table.status],
             border: isSelected ? '3px solid #3B82F6' : '2px solid rgba(0,0,0,0.2)'
@@ -460,7 +459,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
               <Upload className="h-3 w-3" />
               {backgroundImage ? 'Cambiar' : 'Plano'}
             </button>
-            
+
             {/* Botón para limpiar imagen */}
             {backgroundImage && (
               <button
@@ -488,9 +487,8 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
             {/* Toggle grid */}
             <button
               onClick={() => setShowGrid(!showGrid)}
-              className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${
-                showGrid ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
+              className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${showGrid ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
+                }`}
             >
               <Grid className="h-3 w-3" />
               <span className="hidden sm:inline">Grilla</span>
@@ -499,9 +497,8 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
             {/* Toggle edit mode */}
             <button
               onClick={() => setEditMode(!editMode)}
-              className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${
-                editMode ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
+              className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${editMode ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
+                }`}
             >
               {editMode ? <Edit2 className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
               <span className="hidden sm:inline">{editMode ? 'Edición' : 'Vista'}</span>
@@ -626,7 +623,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
       {selectedTable && editMode && (
         <div className="absolute top-16 right-2 w-56 bg-white rounded-lg shadow-lg p-3 z-40 max-h-[calc(100%-80px)] overflow-y-auto">
           <h3 className="font-bold mb-4">Propiedades de Mesa #{tables.find(t => t.id === selectedTable)?.number}</h3>
-          
+
           <div className="space-y-3">
             {/* Número de mesa */}
             <div>
@@ -636,7 +633,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
                 value={tables.find(t => t.id === selectedTable)?.number || 0}
                 onChange={(e) => {
                   const num = parseInt(e.target.value);
-                  setTables(prev => prev.map(t => 
+                  setTables(prev => prev.map(t =>
                     t.id === selectedTable ? { ...t, number: num } : t
                   ));
                 }}
@@ -663,31 +660,28 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => changeTableShape(selectedTable, 'square')}
-                  className={`p-2 border rounded ${
-                    tables.find(t => t.id === selectedTable)?.shape === 'square' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-white'
-                  }`}
+                  className={`p-2 border rounded ${tables.find(t => t.id === selectedTable)?.shape === 'square'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white'
+                    }`}
                 >
                   Cuadrada
                 </button>
                 <button
                   onClick={() => changeTableShape(selectedTable, 'circle')}
-                  className={`p-2 border rounded ${
-                    tables.find(t => t.id === selectedTable)?.shape === 'circle' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-white'
-                  }`}
+                  className={`p-2 border rounded ${tables.find(t => t.id === selectedTable)?.shape === 'circle'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white'
+                    }`}
                 >
                   Redonda
                 </button>
                 <button
                   onClick={() => changeTableShape(selectedTable, 'rectangle')}
-                  className={`p-2 border rounded ${
-                    tables.find(t => t.id === selectedTable)?.shape === 'rectangle' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-white'
-                  }`}
+                  className={`p-2 border rounded ${tables.find(t => t.id === selectedTable)?.shape === 'rectangle'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white'
+                    }`}
                 >
                   Rectangular
                 </button>
@@ -701,7 +695,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
                 value={tables.find(t => t.id === selectedTable)?.status || 'available'}
                 onChange={(e) => {
                   const status = e.target.value as Table['status'];
-                  setTables(prev => prev.map(t => 
+                  setTables(prev => prev.map(t =>
                     t.id === selectedTable ? { ...t, status } : t
                   ));
                 }}

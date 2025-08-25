@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -6,9 +6,10 @@ interface GlassPanelProps {
   children: React.ReactNode;
   className?: string;
   delay?: number;
+  style?: CSSProperties;
 }
 
-export const GlassPanel: React.FC<GlassPanelProps> = ({ children, className = '', delay = 0 }) => {
+export const GlassPanel: React.FC<GlassPanelProps> = ({ children, className = '', delay = 0, style }) => {
   const { theme } = useTheme();
 
   return (
@@ -22,6 +23,7 @@ export const GlassPanel: React.FC<GlassPanelProps> = ({ children, className = ''
         backdropFilter: 'blur(20px)',
         border: `1px solid ${theme.colors.glassBorder}`,
         boxShadow: `0 8px 32px ${theme.colors.shadow}`,
+        ...style, // Merge the passed style prop
       }}
     >
       {children}

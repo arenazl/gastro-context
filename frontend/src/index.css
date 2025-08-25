@@ -31,3 +31,199 @@ a,
   min-height: 44px;
   min-width: 44px;
 }
+
+/* Hide scrollbar like iPhone */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* 🎭 ACORDEÓN VERTICAL ESTILO CLÁSICO */
+.category-accordion {
+  width: 100%;
+  max-width: 900px;
+  height: 420px; /* Aumentado para mostrar productos completos */
+  margin: 20px auto;
+  margin-bottom: 100px; /* Más espacio abajo para el input */
+  overflow: hidden;
+  border-radius: 15px;
+  box-shadow: 0 0 25px 5px rgba(0, 0, 0, 0.35);
+  -webkit-box-shadow: 0 0 25px 5px rgba(0, 0, 0, 0.35);
+  -moz-box-shadow: 0 0 25px 5px rgba(0, 0, 0, 0.35);
+  position: relative;
+  z-index: 1; /* Mantener bajo para no bloquear input */
+  pointer-events: auto; /* Permitir interacción solo donde hay contenido */
+}
+
+/* Responsive para móviles */
+@media (max-width: 640px) {
+  .category-accordion {
+    height: 380px; /* Ajustado para mostrar productos completos en móvil */
+    margin-bottom: 80px;
+    border-radius: 10px;
+  }
+  
+  .category-accordion li {
+    height: 95px; /* Ajustado */
+  }
+  
+  .category-accordion ul:hover li:not(.auto-expanded) {
+    height: 40px; /* Reducido */
+  }
+  
+  .category-accordion ul li:hover,
+  .category-accordion ul li.auto-expanded {
+    height: 290px !important; /* Ajustado para productos completos */
+  }
+  
+  .category-title {
+    height: 95px; /* Ajustado */
+    padding: 0 20px;
+  }
+  
+  .category-products {
+    top: 95px; /* Ajustado */
+    padding: 10px; /* Reducido el padding */
+  }
+}
+
+.category-accordion ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.category-accordion li {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 105px; /* Ajustado para 4 elementos en 420px */
+  overflow: hidden;
+  border-bottom: 1px solid rgba(136, 136, 136, 0.3);
+  
+  box-shadow: 0 0 15px 5px rgba(0, 0, 0, 0.3);
+  -webkit-box-shadow: 0 0 15px 5px rgba(0, 0, 0, 0.3);
+  -moz-box-shadow: 0 0 15px 5px rgba(0, 0, 0, 0.3);
+  
+  /* Transiciones suaves */
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  -moz-transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reducir altura de elementos no hover */
+.category-accordion ul:hover li:not(.auto-expanded) {
+  height: 40px; /* Más pequeño para dar espacio al expandido */
+  opacity: 0.7;
+}
+
+/* Expandir elemento en hover o auto-expandido */
+.category-accordion ul li:hover,
+.category-accordion ul li.auto-expanded {
+  height: 330px !important; /* Aumentado para mostrar productos completos */
+  opacity: 1 !important;
+}
+
+/* Header de categoría */
+.category-title {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.95) 0%, rgba(236, 72, 153, 0.95) 100%);
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 105px; /* Ajustado para coincidir con li height */
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding: 0 30px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.category-accordion li:hover .category-title,
+.category-accordion li.auto-expanded .category-title {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 1) 0%, rgba(236, 72, 153, 1) 100%);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+}
+
+/* Contenido de productos */
+.category-products {
+  position: absolute;
+  top: 105px; /* Ajustado para coincidir con header height */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.6); /* Fondo semi-transparente */
+  backdrop-filter: blur(10px); /* Efecto blur para mejor visibilidad */
+  padding: 10px 15px; /* Reducido el padding */
+  overflow-y: hidden; /* Sin scroll vertical */
+  overflow-x: hidden;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.4s ease;
+}
+
+.category-accordion li:hover .category-products,
+.category-accordion li.auto-expanded .category-products {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Línea horizontal de productos con scroll */
+.products-grid-accordion {
+  display: flex;
+  gap: 15px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 10px;
+  white-space: nowrap;
+  scroll-behavior: smooth;
+  cursor: grab;
+}
+
+.products-grid-accordion:active {
+  cursor: grabbing;
+}
+
+/* Estilo del scrollbar horizontal */
+.products-grid-accordion::-webkit-scrollbar {
+  height: 6px;
+}
+
+.products-grid-accordion::-webkit-scrollbar-track {
+  background: rgba(147, 51, 234, 0.1);
+  border-radius: 10px;
+}
+
+.products-grid-accordion::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #9333ea, #ec4899);
+  border-radius: 10px;
+}
+
+.products-grid-accordion::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #7e22ce, #db2777);
+}
+
+/* Efecto shine al hover */
+.category-accordion li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s;
+  z-index: 15;
+}
+
+.category-accordion li:hover::before {
+  left: 100%;
+}

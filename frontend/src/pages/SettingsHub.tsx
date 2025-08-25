@@ -48,19 +48,10 @@ const settingSections: SettingSection[] = [
     path: '/settings/unified',
     badge: 'Todo en 1'
   },
-
-  {
-    id: 'general',
-    title: 'Configuración General',
-    subtitle: 'Datos del negocio, idioma, métodos de pago',
-    icon: Settings,
-    color: '#6B7280',
-    path: '/settings/general'
-  },
   {
     id: 'business',
     title: 'Datos del Negocio',
-    subtitle: 'Información fiscal y comercial',
+    subtitle: 'Información fiscal y comercial de la empresa',
     icon: Briefcase,
     color: '#0891B2',
     path: '/settings/business'
@@ -68,7 +59,7 @@ const settingSections: SettingSection[] = [
   {
     id: 'localization',
     title: 'Idioma y Región',
-    subtitle: 'Configuración regional y traducciones',
+    subtitle: 'Configuración regional, idioma y zona horaria',
     icon: Globe,
     color: '#7C3AED',
     path: '/settings/localization'
@@ -76,7 +67,7 @@ const settingSections: SettingSection[] = [
   {
     id: 'payments',
     title: 'Métodos de Pago',
-    subtitle: 'Configurar formas de pago y procesadores',
+    subtitle: 'Configurar formas de pago aceptadas',
     icon: CreditCard,
     color: '#059669',
     path: '/settings/payments'
@@ -84,7 +75,7 @@ const settingSections: SettingSection[] = [
   {
     id: 'notifications',
     title: 'Notificaciones',
-    subtitle: 'Alertas y comunicaciones',
+    subtitle: 'Alertas y comunicaciones del sistema',
     icon: Bell,
     color: '#DC2626',
     path: '/settings/notifications'
@@ -92,7 +83,7 @@ const settingSections: SettingSection[] = [
   {
     id: 'security',
     title: 'Seguridad',
-    subtitle: 'Configuración de seguridad y privacidad',
+    subtitle: 'Contraseñas, autenticación y permisos',
     icon: Lock,
     color: '#991B1B',
     path: '/settings/security'
@@ -120,13 +111,23 @@ export const SettingsHub: React.FC = () => {
   const navigate = useNavigate();
 
   const handleNavigate = (path: string) => {
-    // Navigate to the unified settings page
+    // Navigate to the appropriate page
     if (path === '/settings/unified') {
       navigate('/unified-settings');
-    } else if (path === '/products-management') {
-      navigate('/products-management');
-    } else if (path === '/settings/general') {
-      navigate('/settings');
+    } else if (path === '/settings/business') {
+      // Datos del Negocio tiene su propia página
+      navigate('/business-settings');
+    } else if (path === '/settings/localization') {
+      // Idioma y Región tiene su propia página
+      navigate('/localization-settings');
+    } else if (path === '/settings/payments' || 
+               path === '/settings/notifications' || 
+               path === '/settings/security' || 
+               path === '/settings/backup' || 
+               path === '/settings/appearance') {
+      // Estas opciones van a GeneralSettings con el tab correspondiente
+      const tabId = path.split('/').pop();
+      navigate(`/general-settings?tab=${tabId}`);
     } else {
       // For pages not yet implemented, show a toast
       toast.info('Esta sección estará disponible próximamente');

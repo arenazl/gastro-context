@@ -1,19 +1,42 @@
 {
   "menu": {
-    "dashboard": "Panel de Control",
+    "dashboard": "Resumen",
     "tables": "Mesas",
     "newOrder": "Nueva Orden",
     "pos": "POS",
     "kitchen": "Cocina",
+    "kitchenDrag": "Cocina Visual",
     "products": "Productos",
+    "customers": "Clientes",
+    "qrMenu": "Menú QR",
+    "analytics": "Analytics IA",
     "reports": "Reportes",
     "companies": "Empresas",
     "settings": "Configuración"
   },
   "pages": {
     "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Resumen del estado del restaurante"
+      "title": "Resumen",
+      "subtitle": "Resumen del estado del restaurante",
+      "todaysRevenue": "Ingresos de Hoy",
+      "activeOrders": "Pedidos Activos",
+      "customers": "Clientes",
+      "avgOrderTime": "Tiempo Promedio",
+      "recentOrders": "Pedidos Recientes",
+      "topProducts": "Productos Más Vendidos",
+      "orderStatus": "Estado del Pedido",
+      "pending": "Pendiente",
+      "inProgress": "En Progreso",
+      "completed": "Completado",
+      "table": "Mesa",
+      "amount": "Monto",
+      "status": "Estado",
+      "time": "Hora",
+      "product": "Producto",
+      "quantity": "Cantidad",
+      "revenue": "Ingresos",
+      "viewAll": "Ver Todo",
+      "min": "min"
     },
     "tables": {
       "title": "Gestión de Mesas",
@@ -42,6 +65,174 @@
     "settings": {
       "title": "Configuración de Empresa",
       "subtitle": "Personaliza el comportamiento del sistema para tu empresa"
+    },
+    "analytics": {
+      "title": "Analytics IA",
+      "subtitle": "Centro de Inteligencia y Análisis Predictivo",
+      "views": {
+        "executive": "Vista Ejecutiva",
+        "operations": "Operaciones",
+        "financial": "Financiero",
+        "predictive": "IA Predictiva"
+      },
+      "kpis": {
+        "foodCost": "Costo de Alimentos",
+        "laborCost": "Costo Laboral",
+        "primeCost": "Costo Primo",
+        "grossProfit": "Margen Bruto",
+        "salesToday": "Ventas Hoy",
+        "ordersToday": "Pedidos Hoy",
+        "uniqueCustomers": "Clientes Únicos",
+        "avgTime": "Tiempo Promedio",
+        "goal": "meta"
+      },
+      "alerts": {
+        "title": "Alertas Inteligentes AI",
+        "updatedAgo": "Actualizado hace",
+        "confidence": "Confianza",
+        "criticalStock": {
+          "title": "Stock Crítico Detectado",
+          "message": "Salmón Atlántico: Solo 3 porciones restantes. Demanda proyectada: 8 porciones para hoy.",
+          "action": "Contactar proveedor urgente"
+        },
+        "costAnomaly": {
+          "title": "Anomalía en Costos",
+          "message": "Food cost aumentó 3.2% esta semana. Principal causa: Aumento precio carne (+15%).",
+          "action": "Revisar menú y ajustar precios"
+        },
+        "opportunity": {
+          "title": "Oportunidad Detectada",
+          "message": "Pizza Margherita: Ventas +45% últimos 3 días. Sugerencia: Promoción especial.",
+          "action": "Crear combo promocional"
+        },
+        "rushHour": {
+          "title": "Predicción Rush Hour",
+          "message": "Se espera 35% más tráfico entre 13:00-14:30 basado en eventos locales.",
+          "action": "Preparar personal adicional"
+        }
+      },
+      "realtime": {
+        "title": "Métricas en Tiempo Real",
+        "currentHour": "Hora Actual",
+        "sales": "Ventas",
+        "orders": "Pedidos",
+        "avgTicket": "Ticket Promedio",
+        "tablesOccupied": "Mesas Ocupadas",
+        "kitchenTime": "Tiempo Cocina",
+        "occupancy": "ocupación",
+        "target": "Objetivo",
+        "vsYesterday": "vs ayer",
+        "vsWeek": "vs semana",
+        "vsMonth": "vs mes"
+      },
+      "projections": {
+        "dayProjection": "Proyección del Día",
+        "weekProjection": "Proyección Semanal",
+        "salesProjected": "Ventas Proyectadas",
+        "ordersProjected": "Pedidos Proyectados",
+        "completed": "completado",
+        "basedOnTrend": "Basado en tendencia actual"
+      },
+      "inventory": {
+        "alerts": "Alertas de Inventario",
+        "daysLeft": "Días restantes",
+        "critical": "Crítico",
+        "high": "Alto",
+        "medium": "Medio",
+        "low": "Bajo"
+      },
+      "charts": {
+        "salesVsForecast": "Ventas vs Pronóstico (Hoy)",
+        "topProductsVelocity": "Top Productos - Velocidad de Venta",
+        "actualSales": "Ventas Reales",
+        "forecast": "Pronóstico",
+        "orders": "Pedidos",
+        "productPerformance": "Análisis de Rentabilidad por Producto",
+        "revenue": "Ingresos",
+        "unitsSold": "Unidades Vendidas",
+        "margin": "Margen",
+        "weeklyDemand": "Predicción Semanal de Demanda",
+        "costBreakdown": "Desglose de Costos Operativos",
+        "weeklyComparison": "Comparación Semanal",
+        "performanceMetrics": "Métricas de Rendimiento"
+      },
+      "staff": {
+        "title": "Rendimiento del Personal",
+        "performanceToday": "Rendimiento del Personal (Hoy)",
+        "employee": "Empleado",
+        "role": "Rol",
+        "efficiency": "Eficiencia",
+        "metrics": "Métricas",
+        "tables": "mesas",
+        "tips": "propinas",
+        "dishes": "platos",
+        "transactions": "trans.",
+        "errors": "errores",
+        "waiter": "Mesero",
+        "chef": "Chef",
+        "cashier": "Cajero"
+      },
+      "buttons": {
+        "refresh": "Actualizar",
+        "export": "Exportar",
+        "implement": "Implementar sugerencia",
+        "viewAnalysis": "Ver análisis completo",
+        "adjustSchedule": "Ajustar horarios",
+        "createPO": "Crear orden de compra"
+      },
+      "autoRefresh": {
+        "30s": "30 seg",
+        "1m": "1 min",
+        "5m": "5 min",
+        "manual": "Manual"
+      },
+      "lastUpdate": "Actualizado",
+      "minutes": "minutos",
+      "costs": {
+        "foodCost": "Costo de Alimentos",
+        "laborCost": "Costo Laboral",
+        "rent": "Alquiler",
+        "utilities": "Servicios",
+        "marketing": "Marketing",
+        "others": "Otros",
+        "primeAnalysis": "Análisis Prime Cost",
+        "profitMargins": "Márgenes de Ganancia",
+        "grossProfit": "Ganancia Bruta",
+        "operatingProfit": "Ganancia Operativa",
+        "netProfit": "Ganancia Neta",
+        "total": "Total"
+      },
+      "predictions": {
+        "title": "Análisis Predictivo con IA",
+        "modelAccuracy": "Precisión del Modelo",
+        "predictionsMade": "Predicciones Realizadas",
+        "estimatedSavings": "Ahorro Estimado",
+        "thisWeek": "Esta semana",
+        "byOptimization": "Por optimización",
+        "last30Days": "Últimos 30 días",
+        "modelUpdated": "Modelo actualizado",
+        "hoursAgo": "hace 3 horas",
+        "automaticRecommendations": "Recomendaciones Automáticas",
+        "upsellingOpportunity": "Oportunidad de Upselling",
+        "menuOptimization": "Optimización de Menú",
+        "staffOptimization": "Optimización de Personal",
+        "inventoryManagement": "Gestión de Inventario"
+      },
+      "recommendations": {
+        "suggestWine": "Sugerir vino con Ribeye Steak aumentaría ticket promedio en $850 (78% probabilidad de aceptación).",
+        "removeItem": "Retirar 'Fish & Chips' del menú. Baja rotación y margen inferior al promedio.",
+        "reduceStaff": "Reducir 1 mesero martes y miércoles (13:00-16:00). Ahorro mensual: $18,500.",
+        "increaseOrder": "Aumentar pedido de Pizza base en 30% para próximo fin de semana (evento local detectado).",
+        "implementSuggestion": "Implementar sugerencia",
+        "viewFullAnalysis": "Ver análisis completo",
+        "adjustSchedules": "Ajustar horarios",
+        "createPurchaseOrder": "Crear orden de compra"
+      },
+      "operationalCostBreakdown": "Desglose de Costos Operativos",
+      "primeCostAnalysis": "Análisis Prime Cost",
+      "totalPrimeCost": "Prime Cost Total",
+      "laborCostPercentage": "Costo Laboral",
+      "foodCostPercentage": "Costo Alimentos"
     }
   },
   "auth": {
@@ -73,7 +264,6 @@
   },
   "orders": {
     "title": "Nueva Orden",
-    "table": "Mesa",
     "selectTable": "Seleccionar Mesa",
     "cart": "Carrito",
     "empty": "Carrito vacío",
@@ -88,7 +278,6 @@
     "orderProcessed": "Orden procesada exitosamente",
     "orderError": "Error al procesar la orden",
     "tableAndCustomer": "Mesa y Cliente",
-    "customer": "Cliente",
     "viewCart": "Ver Carrito",
     "clear": "Limpiar",
     "cartCleared": "Carrito vaciado",
