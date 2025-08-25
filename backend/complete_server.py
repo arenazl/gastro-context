@@ -3535,8 +3535,11 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
 
     def serve_frontend(self, path):
         """Serve frontend static files (React build)"""
+        # Si es un archivo de assets, servirlo directamente
+        if path.startswith('/assets/'):
+            file_path = os.path.join(STATIC_DIR, path.lstrip('/'))
         # Si es la raíz o una ruta de React, servir index.html
-        if path == '/' or not path.startswith('/api') and not path.startswith('/static'):
+        elif path == '/' or (not path.startswith('/api') and not path.startswith('/static')):
             file_path = os.path.join(STATIC_DIR, 'index.html')
         else:
             # Servir el archivo solicitado
