@@ -16,7 +16,14 @@ import {
   Users,
   Grid,
   Eye,
-  EyeOff
+  EyeOff,
+  Square,
+  Circle,
+  RectangleHorizontal,
+  ZoomIn,
+  ZoomOut,
+  Image,
+  Layers
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -31,6 +38,8 @@ interface Table {
   height?: number;
   rotation?: number;
   shape?: 'square' | 'circle' | 'rectangle';
+  type?: 'table' | 'decoration';
+  decorationType?: 'plant' | 'column' | 'divider' | 'bar' | 'entrance' | 'kitchen';
 }
 
 interface TableLayoutDesignerProps {
@@ -59,6 +68,9 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   const [editMode, setEditMode] = useState(!readOnly);
   const [backgroundOffsetY, setBackgroundOffsetY] = useState(50); // Offset inicial de 50px hacia abajo
   const [backgroundOffsetX, setBackgroundOffsetX] = useState(0); // Offset horizontal
+  const [addMode, setAddMode] = useState<'table' | 'decoration'>('table');
+  const [isDraggingBackground, setIsDraggingBackground] = useState(false);
+  const [bgDragStart, setBgDragStart] = useState({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +124,17 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Si estamos arrastrando el fondo
+    if (isDraggingBackground && backgroundImage && editMode) {
+      const deltaX = e.clientX - bgDragStart.x;
+      const deltaY = e.clientY - bgDragStart.y;
+      
+      setBackgroundOffsetX(bgDragStart.offsetX + deltaX);
+      setBackgroundOffsetY(bgDragStart.offsetY + deltaY);
+      return;
+    }
+
+    // Si estamos arrastrando una mesa
     if (!isDragging || draggedTable === null || !containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -131,15 +154,27 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   };
 
   const handleMouseUp = () => {
+    // Si estábamos arrastrando el fondo, guardar la posición
+    if (isDraggingBackground && backgroundImage) {
+      const layoutSettings = {
+        backgroundImage,
+        backgroundOffsetX,
+        backgroundOffsetY
+      };
+      localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
+    }
+    
     setIsDragging(false);
     setDraggedTable(null);
+    setIsDraggingBackground(false);
   };
 
   // Agregar nueva mesa
   const addTable = () => {
+    const tableCount = tables.filter(t => t.type !== 'decoration').length;
     const newTable: Table = {
       id: Date.now(),
-      number: tables.length + 1,
+      number: tableCount + 1,
       capacity: 4,
       status: 'available',
       x: 100,
@@ -147,10 +182,40 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
       width: 80,
       height: 80,
       shape: 'square',
-      rotation: 0
+      rotation: 0,
+      type: 'table'
     };
     setTables([...tables, newTable]);
     setSelectedTable(newTable.id);
+  };
+
+  // Agregar decoración
+  const addDecoration = (decorationType: Table['decorationType']) => {
+    const sizes = {
+      plant: { width: 40, height: 40 },
+      column: { width: 50, height: 50 },
+      divider: { width: 100, height: 20 },
+      bar: { width: 150, height: 60 },
+      entrance: { width: 80, height: 30 },
+      kitchen: { width: 120, height: 80 }
+    };
+
+    const newDecoration: Table = {
+      id: Date.now(),
+      number: 0,
+      capacity: 0,
+      status: 'available',
+      x: 150,
+      y: 150,
+      width: sizes[decorationType!].width,
+      height: sizes[decorationType!].height,
+      shape: decorationType === 'plant' ? 'circle' : 'rectangle',
+      rotation: 0,
+      type: 'decoration',
+      decorationType
+    };
+    setTables([...tables, newDecoration]);
+    setSelectedTable(newDecoration.id);
   };
 
   // Eliminar mesa
@@ -219,7 +284,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
       };
 
       // Guardar configuración del mapa
-      await fetch(`${API_URL}/api/map-settings`, {
+      await fetch(`${API_BASE_URL}/api/map-settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mapSettings)
@@ -238,7 +303,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
         company_id: 1
       };
 
-      await fetch(`${API_URL}/api/area-settings/${areaId}`, {
+      await fetch(`${API_BASE_URL}/api/area-settings/${areaId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(areaSettings)
@@ -307,7 +372,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
     const loadConfiguration = async () => {
       try {
         // Cargar configuración del mapa desde la base de datos
-        const mapResponse = await fetch(`${API_URL}/api/map-settings?company_id=1`);
+        const mapResponse = await fetch(`${API_BASE_URL}/api/map-settings?company_id=1`);
         if (mapResponse.ok) {
           const mapSettings = await mapResponse.json();
           if (mapSettings) {
@@ -324,7 +389,7 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
 
         // Cargar configuración del área
         const areaId = 1; // TODO: Obtener área actual del contexto
-        const areaResponse = await fetch(`${API_URL}/api/area-settings/${areaId}?company_id=1`);
+        const areaResponse = await fetch(`${API_BASE_URL}/api/area-settings/${areaId}?company_id=1`);
         if (areaResponse.ok) {
           const areaSettings = await areaResponse.json();
           if (areaSettings) {
@@ -366,20 +431,169 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
     loadConfiguration();
   }, []);
 
+  // Renderizar elemento decorativo
+  const renderDecoration = (item: Table) => {
+    const isSelected = selectedTable === item.id;
+
+    const decorationStyles = {
+      plant: {
+        background: 'radial-gradient(circle, #228B22 0%, #006400 100%)',
+        border: '2px solid #654321',
+        content: '🌿'
+      },
+      column: {
+        background: 'linear-gradient(180deg, #D3D3D3 0%, #A9A9A9 50%, #808080 100%)',
+        border: '2px solid #696969',
+        content: '◼'
+      },
+      divider: {
+        background: 'linear-gradient(90deg, #8B4513 0%, #654321 50%, #8B4513 100%)',
+        border: '1px solid #4A2C17',
+        content: ''
+      },
+      bar: {
+        background: 'linear-gradient(180deg, #2C1810 0%, #1A0E08 100%)',
+        border: '2px solid #8B4513',
+        content: '🍸'
+      },
+      entrance: {
+        background: 'linear-gradient(90deg, #FFD700 0%, #FFA500 100%)',
+        border: '2px solid #B8860B',
+        content: '🚪'
+      },
+      kitchen: {
+        background: 'linear-gradient(135deg, #C0C0C0 0%, #A9A9A9 50%, #C0C0C0 100%)',
+        border: '2px solid #696969',
+        content: '🍳'
+      }
+    };
+
+    const style = decorationStyles[item.decorationType!] || decorationStyles.plant;
+
+    return (
+      <motion.div
+        key={item.id}
+        className="absolute cursor-pointer select-none"
+        style={{
+          left: item.x,
+          top: item.y,
+          width: item.width || 40,
+          height: item.height || 40,
+          transform: `rotate(${item.rotation || 0}deg)`,
+          zIndex: isSelected ? 100 : 5
+        }}
+        animate={{
+          scale: isSelected ? 1.1 : 1,
+          transition: { type: 'spring', stiffness: 300 }
+        }}
+        whileHover={{ scale: editMode ? 1.05 : 1 }}
+        onMouseDown={(e) => handleMouseDown(e, item.id)}
+        onClick={() => !isDragging && setSelectedTable(item.id)}
+      >
+        <div
+          className={`relative w-full h-full flex items-center justify-center ${
+            item.decorationType === 'plant' || item.decorationType === 'column' 
+              ? 'rounded-full' 
+              : 'rounded-lg'
+          }`}
+          style={{
+            background: style.background,
+            border: style.border,
+            boxShadow: isSelected 
+              ? '0 8px 24px rgba(0,0,0,0.3)' 
+              : '0 4px 12px rgba(0,0,0,0.2)'
+          }}
+        >
+          <span className="text-2xl" style={{ fontSize: item.decorationType === 'plant' ? '24px' : '20px' }}>
+            {style.content}
+          </span>
+        </div>
+
+        {/* Controles de edición */}
+        {isSelected && editMode && (
+          <motion.div 
+            className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm rounded-full shadow-xl px-2 py-1 flex gap-1"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                rotateTable(item.id, 45);
+              }}
+              className="p-1 hover:bg-blue-100 rounded-full transition-colors"
+              title="Rotar"
+            >
+              <RotateCw className="h-3 w-3 text-blue-600" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteTable(item.id);
+              }}
+              className="p-1 hover:bg-red-100 rounded-full transition-colors"
+              title="Eliminar"
+            >
+              <Trash2 className="h-3 w-3 text-red-600" />
+            </button>
+          </motion.div>
+        )}
+      </motion.div>
+    );
+  };
+
   // Renderizar mesa
   const renderTable = (table: Table) => {
+    if (table.type === 'decoration') {
+      return renderDecoration(table);
+    }
+
     const isSelected = selectedTable === table.id;
-    const statusColors = {
-      available: '#10B981',
-      occupied: '#EF4444',
-      reserved: '#F59E0B',
-      maintenance: '#6B7280'
+    
+    // Estilos según el estado
+    const getTableStyle = () => {
+      const baseStyle = {
+        backgroundImage: table.shape === 'circle' 
+          ? 'radial-gradient(ellipse at center, #8B4513 0%, #654321 50%, #4A2C17 100%)'
+          : 'linear-gradient(135deg, #8B4513 0%, #654321 25%, #8B4513 50%, #654321 75%, #8B4513 100%)',
+        backgroundSize: table.shape === 'circle' ? '100% 100%' : '20px 20px',
+        boxShadow: isSelected 
+          ? '0 8px 32px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.2)' 
+          : '0 4px 16px rgba(0,0,0,0.2), inset 0 1px 2px rgba(255,255,255,0.1)'
+      };
+
+      // Overlay según estado
+      let overlay = '';
+      let borderColor = '#654321';
+      let statusIcon = null;
+      
+      switch(table.status) {
+        case 'occupied':
+          overlay = 'rgba(239, 68, 68, 0.3)';
+          borderColor = '#DC2626';
+          break;
+        case 'reserved':
+          overlay = 'rgba(245, 158, 11, 0.3)';
+          borderColor = '#D97706';
+          break;
+        case 'maintenance':
+          overlay = 'rgba(107, 114, 128, 0.5)';
+          borderColor = '#4B5563';
+          break;
+        default:
+          overlay = 'rgba(34, 197, 94, 0.15)';
+          borderColor = isSelected ? '#3B82F6' : '#8B6331';
+      }
+
+      return { baseStyle, overlay, borderColor };
     };
+
+    const { baseStyle, overlay, borderColor } = getTableStyle();
 
     return (
       <motion.div
         key={table.id}
-        className={`absolute cursor-pointer select-none ${editMode ? 'cursor-move' : ''}`}
+        className="absolute cursor-pointer select-none"
         style={{
           left: table.x,
           top: table.y,
@@ -389,51 +603,92 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
           zIndex: isSelected ? 100 : 10
         }}
         animate={{
-          scale: isSelected ? 1.05 : 1
+          scale: isSelected ? 1.08 : 1,
+          transition: { type: 'spring', stiffness: 300 }
         }}
+        whileHover={{ scale: editMode ? 1.05 : 1.02 }}
         onMouseDown={(e) => handleMouseDown(e, table.id)}
         onClick={() => !isDragging && setSelectedTable(table.id)}
       >
-        {/* Forma de la mesa */}
+        {/* Mesa con aspecto de madera */}
         <div
-          className={`w-full h-full flex flex-col items-center justify-center text-white font-bold shadow-lg transition-all ${table.shape === 'circle' ? 'rounded-full' : table.shape === 'rectangle' ? 'rounded-lg' : 'rounded-lg'
-            }`}
+          className={`relative w-full h-full ${table.shape === 'circle' ? 'rounded-full' : table.shape === 'rectangle' ? 'rounded-xl' : 'rounded-xl'}`}
           style={{
-            backgroundColor: statusColors[table.status],
-            border: isSelected ? '3px solid #3B82F6' : '2px solid rgba(0,0,0,0.2)'
+            ...baseStyle,
+            border: `3px solid ${borderColor}`,
+            position: 'relative',
+            overflow: 'hidden'
           }}
         >
-          <div className="text-2xl">#{table.number}</div>
-          <div className="text-xs flex items-center gap-1">
-            <Users className="h-3 w-3" />
-            {table.capacity}
+          {/* Overlay de estado */}
+          <div 
+            className="absolute inset-0"
+            style={{ 
+              backgroundColor: overlay,
+              borderRadius: 'inherit'
+            }}
+          />
+          
+          {/* Efecto de vetas de madera */}
+          <div 
+            className="absolute inset-0 opacity-20"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.1) 3px, rgba(0,0,0,0.1) 6px)',
+              borderRadius: 'inherit'
+            }}
+          />
+
+          {/* Contenido de la mesa */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            {/* Número de mesa - grande y visible */}
+            <div className="text-white font-bold text-3xl drop-shadow-lg">
+              {table.number}
+            </div>
+            
+            {/* Capacidad - más pequeño abajo */}
+            <div className="text-white/90 text-sm font-medium drop-shadow mt-1">
+              {table.capacity} 👥
+            </div>
+
+            {/* Indicador de estado */}
+            {table.status !== 'available' && (
+              <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full animate-pulse ${
+                table.status === 'occupied' ? 'bg-red-500' :
+                table.status === 'reserved' ? 'bg-yellow-500' :
+                'bg-gray-500'
+              }`} />
+            )}
           </div>
         </div>
 
-        {/* Controles de edición */}
+        {/* Controles de edición mejorados */}
         {isSelected && editMode && (
-          <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-1 flex gap-1">
+          <motion.div 
+            className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm rounded-full shadow-xl px-2 py-1 flex gap-1"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 rotateTable(table.id, 45);
               }}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Rotar"
+              className="p-1.5 hover:bg-blue-100 rounded-full transition-colors"
+              title="Rotar mesa"
             >
-              <RotateCw className="h-4 w-4" />
+              <RotateCw className="h-4 w-4 text-blue-600" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 deleteTable(table.id);
               }}
-              className="p-1 hover:bg-red-100 text-red-600 rounded"
-              title="Eliminar"
+              className="p-1.5 hover:bg-red-100 rounded-full transition-colors"
+              title="Eliminar mesa"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-4 w-4 text-red-600" />
             </button>
-          </div>
+          </motion.div>
         )}
       </motion.div>
     );
@@ -455,9 +710,9 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 flex items-center gap-1.5 transition-all shadow-md font-medium"
             >
-              <Upload className="h-3 w-3" />
+              <Upload className="h-4 w-4" />
               {backgroundImage ? 'Cambiar' : 'Plano'}
             </button>
 
@@ -469,29 +724,103 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
                   localStorage.removeItem('restaurant_layout');
                   toast.info('Imagen de fondo eliminada');
                 }}
-                className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                className="px-2 py-1.5 text-sm bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all shadow-md"
                 title="Eliminar imagen de fondo"
               >
                 ✕
               </button>
             )}
 
-            {/* Agregar mesa */}
-            <button
-              onClick={addTable}
-              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1"
-            >
-              <Plus className="h-3 w-3" />
-              Mesa
-            </button>
+            {/* Menú de agregar elementos mejorado */}
+            <div className="flex items-center gap-2">
+              {/* Selector de modo */}
+              <div className="flex rounded-lg overflow-hidden border-2 border-gray-200">
+                <button
+                  onClick={() => setAddMode('table')}
+                  className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                    addMode === 'table' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Mesas
+                </button>
+                <button
+                  onClick={() => setAddMode('decoration')}
+                  className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                    addMode === 'decoration' 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Decoración
+                </button>
+              </div>
+
+              {/* Botones según el modo */}
+              {addMode === 'table' ? (
+                <button
+                  onClick={addTable}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1.5 font-medium shadow-md"
+                >
+                  <Plus className="h-4 w-4" />
+                  Agregar Mesa
+                </button>
+              ) : (
+                <div className="flex gap-1 bg-white rounded-lg p-1 shadow-md border border-gray-200">
+                  <button
+                    onClick={() => addDecoration('plant')}
+                    className="p-1.5 text-green-700 bg-green-50 hover:bg-green-100 rounded transition-all"
+                    title="Agregar planta"
+                  >
+                    <Trees className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => addDecoration('column')}
+                    className="p-1.5 text-gray-700 bg-gray-50 hover:bg-gray-100 rounded transition-all"
+                    title="Agregar columna"
+                  >
+                    <Columns className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => addDecoration('divider')}
+                    className="p-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded transition-all"
+                    title="Agregar divisor"
+                  >
+                    <SplitSquareVertical className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => addDecoration('bar')}
+                    className="p-1.5 text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-all"
+                    title="Agregar barra"
+                  >
+                    <Wine className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => addDecoration('entrance')}
+                    className="p-1.5 text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded transition-all"
+                    title="Agregar entrada"
+                  >
+                    <Home className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => addDecoration('kitchen')}
+                    className="p-1.5 text-red-700 bg-red-50 hover:bg-red-100 rounded transition-all"
+                    title="Agregar cocina"
+                  >
+                    <ChefHat className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Toggle grid */}
             <button
               onClick={() => setShowGrid(!showGrid)}
-              className={`px-3 py-1 text-sm rounded flex items-center gap-1 ${showGrid ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
+              className={`px-3 py-1.5 text-sm rounded-xl flex items-center gap-1.5 transition-all shadow-md font-medium ${showGrid ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
                 }`}
             >
-              <Grid className="h-3 w-3" />
+              <Grid className="h-4 w-4" />
               <span className="hidden sm:inline">Grilla</span>
             </button>
 
@@ -505,116 +834,53 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
               <span className="hidden sm:inline">{editMode ? 'Edición' : 'Vista'}</span>
             </button>
 
-            {/* Ajuste de posición de fondo */}
-            {backgroundImage && (
-              <div className="flex items-center gap-1">
-                <span className="text-xs px-1">Mover fondo:</span>
-                <button
-                  onClick={() => {
-                    const newOffsetX = backgroundOffsetX - 10;
-                    setBackgroundOffsetX(newOffsetX);
-                    // Guardar automáticamente el nuevo offset
-                    const layoutSettings = {
-                      backgroundImage,
-                      backgroundOffsetX: newOffsetX,
-                      backgroundOffsetY
-                    };
-                    localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
-                  title="Mover imagen hacia la izquierda"
-                >
-                  ←
-                </button>
-                <button
-                  onClick={() => {
-                    const newOffsetX = backgroundOffsetX + 10;
-                    setBackgroundOffsetX(newOffsetX);
-                    // Guardar automáticamente el nuevo offset
-                    const layoutSettings = {
-                      backgroundImage,
-                      backgroundOffsetX: newOffsetX,
-                      backgroundOffsetY
-                    };
-                    localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
-                  title="Mover imagen hacia la derecha"
-                >
-                  →
-                </button>
-                <button
-                  onClick={() => {
-                    const newOffsetY = backgroundOffsetY - 10;
-                    setBackgroundOffsetY(newOffsetY);
-                    // Guardar automáticamente el nuevo offset
-                    const layoutSettings = {
-                      backgroundImage,
-                      backgroundOffsetX,
-                      backgroundOffsetY: newOffsetY
-                    };
-                    localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
-                  title="Mover imagen hacia arriba"
-                >
-                  ↑
-                </button>
-                <button
-                  onClick={() => {
-                    const newOffsetY = backgroundOffsetY + 10;
-                    setBackgroundOffsetY(newOffsetY);
-                    // Guardar automáticamente el nuevo offset
-                    const layoutSettings = {
-                      backgroundImage,
-                      backgroundOffsetX,
-                      backgroundOffsetY: newOffsetY
-                    };
-                    localStorage.setItem('restaurant_layout', JSON.stringify(layoutSettings));
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
-                  title="Mover imagen hacia abajo"
-                >
-                  ↓
-                </button>
+            {/* Indicador de arrastre de fondo */}
+            {backgroundImage && editMode && (
+              <div className="flex items-center gap-2 bg-gradient-to-br from-yellow-50 to-amber-50 rounded-xl px-3 py-1.5 border border-yellow-200">
+                <Move className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-700">
+                  {isDraggingBackground ? 'Arrastrando fondo...' : 'Arrastra el fondo para moverlo'}
+                </span>
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Zoom */}
-            <div className="flex items-center gap-2">
+            {/* Zoom mejorado */}
+            <div className="flex items-center gap-2 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl px-3 py-1 border border-blue-200">
               <button
                 onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-                className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                className="w-8 h-8 bg-white rounded-lg hover:bg-blue-50 transition-all flex items-center justify-center text-blue-600 border border-blue-200"
               >
-                -
+                <ZoomOut className="h-4 w-4" />
               </button>
-              <span className="text-sm font-medium">{Math.round(zoom * 100)}%</span>
+              <span className="text-sm font-semibold text-blue-700 min-w-[3rem] text-center">
+                {Math.round(zoom * 100)}%
+              </span>
               <button
                 onClick={() => setZoom(Math.min(2, zoom + 0.1))}
-                className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                className="w-8 h-8 bg-white rounded-lg hover:bg-blue-50 transition-all flex items-center justify-center text-blue-600 border border-blue-200"
               >
-                +
+                <ZoomIn className="h-4 w-4" />
               </button>
             </div>
 
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
-              className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-1"
+              className="px-3 py-1.5 text-sm bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl hover:from-purple-600 hover:to-indigo-600 flex items-center gap-1.5 transition-all shadow-md font-medium"
             >
-              {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               <span className="hidden sm:inline">{isFullscreen ? 'Min' : 'Max'}</span>
             </button>
 
             {/* Guardar */}
             <button
               onClick={handleSave}
-              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-1"
+              className="px-4 py-1.5 text-sm bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 flex items-center gap-1.5 transition-all shadow-md font-medium"
             >
-              <Save className="h-3 w-3" />
-              <span className="hidden sm:inline">Guardar</span>
+              <Save className="h-4 w-4" />
+              <span>Guardar</span>
             </button>
           </div>
         </div>
@@ -738,7 +1004,24 @@ export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
             backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
             backgroundSize: 'cover',
             backgroundPosition: `${backgroundOffsetX}px ${backgroundOffsetY}px`,
-            backgroundRepeat: 'no-repeat'
+            backgroundRepeat: 'no-repeat',
+            cursor: isDraggingBackground ? 'grabbing' : (backgroundImage && editMode && !isDragging ? 'grab' : 'default')
+          }}
+          onMouseDown={(e) => {
+            // Solo iniciar drag del fondo si:
+            // 1. Hay imagen de fondo
+            // 2. Estamos en modo edición
+            // 3. No hay elemento clickeado (e.target === e.currentTarget)
+            if (backgroundImage && editMode && e.target === e.currentTarget && !isDragging) {
+              e.preventDefault();
+              setIsDraggingBackground(true);
+              setBgDragStart({
+                x: e.clientX,
+                y: e.clientY,
+                offsetX: backgroundOffsetX,
+                offsetY: backgroundOffsetY
+              });
+            }
           }}
         >
           {/* Grid */}

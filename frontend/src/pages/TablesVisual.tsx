@@ -12,7 +12,14 @@ import {
   Save,
   RefreshCw,
   Settings,
-  Eye
+  Eye,
+  Users,
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  Layers,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 interface Table {
@@ -39,6 +46,22 @@ export const TablesVisual: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // CSS para animación de rotación lenta
+  const animationStyles = `
+    @keyframes spin-slow {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    
+    .animate-spin-slow {
+      animation: spin-slow 3s linear infinite;
+    }
+  `;
+
   useEffect(() => {
     loadTables();
     loadLayoutSettings();
@@ -47,7 +70,7 @@ export const TablesVisual: React.FC = () => {
   const loadTables = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/tables`);
+      const response = await fetch(`${API_BASE_URL}/api/tables`);
       const data = await response.json();
       
       // Convertir los datos del backend al formato del componente visual
@@ -91,7 +114,7 @@ export const TablesVisual: React.FC = () => {
     try {
       // Guardar posiciones de las mesas en el backend
       for (const table of updatedTables) {
-        await fetch(`${API_URL}/api/tables/${table.id}`, {
+        await fetch(`${API_BASE_URL}/api/tables/${table.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -150,140 +173,238 @@ export const TablesVisual: React.FC = () => {
   };
 
   const GridView = () => (
-    <div className="bg-white rounded-lg shadow-lg p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {tables.map(table => (
-          <div
-            key={table.id}
-            onClick={() => handleTableClick(table.id)}
-            className={`p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-lg ${getStatusColor(table.status)}`}
-          >
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="text-xl font-bold">Mesa #{table.number}</h3>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                table.status === 'available' ? 'bg-green-200 text-green-800' :
-                table.status === 'occupied' ? 'bg-red-200 text-red-800' :
-                table.status === 'reserved' ? 'bg-yellow-200 text-yellow-800' :
-                'bg-gray-200 text-gray-800'
-              }`}>
-                {table.status === 'available' ? 'Disponible' :
-                 table.status === 'occupied' ? 'Ocupada' :
-                 table.status === 'reserved' ? 'Reservada' :
-                 'Mantenimiento'}
-              </span>
+    <div className="p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+        {tables.filter(t => t.type !== 'decoration').map(table => {
+          const statusConfig = {
+            available: {
+              bgColor: 'bg-gradient-to-br from-green-50 to-emerald-50',
+              borderColor: 'border-green-300',
+              iconBg: 'bg-green-100',
+              iconColor: 'text-green-600',
+              icon: <CheckCircle className="h-5 w-5" />,
+              label: 'Disponible',
+              buttonBg: 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600'
+            },
+            occupied: {
+              bgColor: 'bg-gradient-to-br from-red-50 to-rose-50',
+              borderColor: 'border-red-300',
+              iconBg: 'bg-red-100',
+              iconColor: 'text-red-600',
+              icon: <Users className="h-5 w-5" />,
+              label: 'Ocupada',
+              buttonBg: 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600'
+            },
+            reserved: {
+              bgColor: 'bg-gradient-to-br from-yellow-50 to-amber-50',
+              borderColor: 'border-yellow-300',
+              iconBg: 'bg-yellow-100',
+              iconColor: 'text-yellow-600',
+              icon: <Clock className="h-5 w-5" />,
+              label: 'Reservada',
+              buttonBg: 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600'
+            },
+            maintenance: {
+              bgColor: 'bg-gradient-to-br from-gray-50 to-slate-50',
+              borderColor: 'border-gray-300',
+              iconBg: 'bg-gray-100',
+              iconColor: 'text-gray-600',
+              icon: <AlertCircle className="h-5 w-5" />,
+              label: 'Mantenimiento',
+              buttonBg: 'bg-gradient-to-r from-gray-500 to-slate-500'
+            }
+          };
+
+          const config = statusConfig[table.status] || statusConfig.available;
+
+          return (
+            <div
+              key={table.id}
+              onClick={() => handleTableClick(table.id)}
+              className={`relative group cursor-pointer transition-all duration-300 hover:transform hover:-translate-y-1`}
+            >
+              <div className={`${config.bgColor} border-2 ${config.borderColor} rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all`}>
+                {/* Header */}
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">Mesa {table.number}</h3>
+                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {table.capacity} personas
+                    </p>
+                  </div>
+                  <div className={`${config.iconBg} ${config.iconColor} p-2 rounded-full`}>
+                    {config.icon}
+                  </div>
+                </div>
+
+                {/* Status Badge */}
+                <div className="mb-4">
+                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                    config.iconBg
+                  } ${config.iconColor}`}>
+                    {config.label}
+                  </span>
+                </div>
+
+                {/* Mesa visual pequeña */}
+                <div className="mb-4 flex justify-center">
+                  <div className={`w-16 h-16 ${
+                    table.shape === 'circle' ? 'rounded-full' : 
+                    table.shape === 'rectangle' ? 'rounded-lg w-20' : 'rounded-lg'
+                  } bg-gradient-to-br from-amber-700 to-amber-900 shadow-md border-2 border-amber-800 flex items-center justify-center text-white font-bold`}>
+                    {table.number}
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                {(table.status === 'available' || table.status === 'occupied') && (
+                  <button className={`w-full py-2.5 px-4 ${config.buttonBg} text-white rounded-xl font-medium transition-all transform hover:scale-105 shadow-md hover:shadow-lg`}>
+                    {table.status === 'occupied' ? 'Ver Orden' : 'Nueva Orden'}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="text-sm text-gray-600">
-              <p>Capacidad: {table.capacity} personas</p>
-              {table.location && <p>Ubicación: {table.location}</p>}
-            </div>
-            {table.status === 'occupied' && (
-              <button className="mt-3 w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors">
-                Ver Orden
-              </button>
-            )}
-            {table.status === 'available' && (
-              <button className="mt-3 w-full bg-green-500 text-white py-2 rounded hover:bg-green-600 transition-colors">
-                Nueva Orden
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <style>{animationStyles}</style>
       <PageHeader
         title="Gestión de Mesas"
-        subtitle="Diseño visual y administración de mesas"
+        subtitle="Administración visual del salón del restaurante"
       />
 
       <div className="px-6 py-4">
-        {/* Barra de herramientas superior */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+        {/* Barra de herramientas superior mejorada */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-5 mb-6">
           <div className="flex justify-between items-center">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setViewMode('visual')}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  viewMode === 'visual' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <Map className="h-5 w-5" />
-                Vista Visual
-              </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  viewMode === 'grid' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <Grid className="h-5 w-5" />
-                Vista Cuadrícula
-              </button>
-            </div>
-
-            <div className="flex gap-2">
-              {viewMode === 'visual' && (
+            <div className="flex items-center gap-2">
+              {/* Selector de vista con candado integrado */}
+              <div className="bg-gray-100 rounded-xl p-1 flex items-center gap-1">
                 <button
-                  onClick={() => setIsEditMode(!isEditMode)}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                    isEditMode 
-                      ? 'bg-orange-600 text-white' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  onClick={() => {
+                    setViewMode('visual');
+                    if (viewMode !== 'visual') setIsEditMode(true);
+                  }}
+                  className={`px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all font-medium ${
+                    viewMode === 'visual' 
+                      ? 'bg-white text-blue-600 shadow-md' 
+                      : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
-                  {isEditMode ? <Settings className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  {isEditMode ? 'Modo Edición' : 'Modo Vista'}
+                  <Layers className="h-5 w-5" />
+                  <span>Diseño Visual</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all font-medium ${
+                    viewMode === 'grid' 
+                      ? 'bg-white text-blue-600 shadow-md' 
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  <Grid className="h-5 w-5" />
+                  <span>Vista Tarjetas</span>
+                </button>
+                
+                {/* Botón de candado solo cuando está en vista visual */}
+                {viewMode === 'visual' && (
+                  <div className="border-l border-gray-300 ml-1 pl-1">
+                    <button
+                      onClick={() => setIsEditMode(!isEditMode)}
+                      className={`p-2 rounded-lg transition-all ${
+                        isEditMode 
+                          ? 'text-green-600 hover:bg-green-50' 
+                          : 'text-red-600 hover:bg-red-50'
+                      }`}
+                      title={isEditMode ? 'Bloquear diseño' : 'Desbloquear diseño'}
+                    >
+                      {isEditMode ? <Unlock className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Solo mostrar botón de refrescar en vista de tarjetas */}
+              {viewMode === 'grid' && (
+                <button
+                  onClick={loadTables}
+                  disabled={loading}
+                  className="px-4 py-2.5 bg-white border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 transition-all font-medium"
+                >
+                  <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Actualizar</span>
                 </button>
               )}
-              <button
-                onClick={loadTables}
-                disabled={loading}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-                Actualizar
-              </button>
             </div>
           </div>
 
-          {/* Estadísticas rápidas */}
-          <div className="mt-4 grid grid-cols-4 gap-4">
-            <div className="bg-green-50 p-3 rounded-lg">
-              <div className="text-green-600 text-sm font-medium">Disponibles</div>
-              <div className="text-2xl font-bold text-green-700">
-                {tables.filter(t => t.status === 'available').length}
+          {/* Estadísticas rápidas mejoradas */}
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-green-600 text-sm font-medium">Disponibles</div>
+                  <div className="text-3xl font-bold text-green-700 mt-1">
+                    {tables.filter(t => t.status === 'available' && t.type !== 'decoration').length}
+                  </div>
+                </div>
+                <div className="bg-green-100 p-3 rounded-full">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                </div>
               </div>
             </div>
-            <div className="bg-red-50 p-3 rounded-lg">
-              <div className="text-red-600 text-sm font-medium">Ocupadas</div>
-              <div className="text-2xl font-bold text-red-700">
-                {tables.filter(t => t.status === 'occupied').length}
+            <div className="bg-gradient-to-br from-red-50 to-rose-50 p-4 rounded-xl border border-red-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-red-600 text-sm font-medium">Ocupadas</div>
+                  <div className="text-3xl font-bold text-red-700 mt-1">
+                    {tables.filter(t => t.status === 'occupied' && t.type !== 'decoration').length}
+                  </div>
+                </div>
+                <div className="bg-red-100 p-3 rounded-full">
+                  <Users className="h-6 w-6 text-red-600" />
+                </div>
               </div>
             </div>
-            <div className="bg-yellow-50 p-3 rounded-lg">
-              <div className="text-yellow-600 text-sm font-medium">Reservadas</div>
-              <div className="text-2xl font-bold text-yellow-700">
-                {tables.filter(t => t.status === 'reserved').length}
+            <div className="bg-gradient-to-br from-yellow-50 to-amber-50 p-4 rounded-xl border border-yellow-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-yellow-700 text-sm font-medium">Reservadas</div>
+                  <div className="text-3xl font-bold text-yellow-800 mt-1">
+                    {tables.filter(t => t.status === 'reserved' && t.type !== 'decoration').length}
+                  </div>
+                </div>
+                <div className="bg-yellow-100 p-3 rounded-full">
+                  <Clock className="h-6 w-6 text-yellow-700" />
+                </div>
               </div>
             </div>
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <div className="text-blue-600 text-sm font-medium">Total Mesas</div>
-              <div className="text-2xl font-bold text-blue-700">
-                {tables.length}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-blue-600 text-sm font-medium">Total Mesas</div>
+                  <div className="text-3xl font-bold text-blue-700 mt-1">
+                    {tables.filter(t => t.type !== 'decoration').length}
+                  </div>
+                </div>
+                <div className="bg-blue-100 p-3 rounded-full">
+                  <Layers className="h-6 w-6 text-blue-600" />
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Vista principal */}
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: 'calc(100vh - 250px)' }}>
+        {/* Vista principal mejorada */}
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100" style={{ height: 'calc(100vh - 320px)' }}>
           {viewMode === 'visual' ? (
             <TableLayoutDesigner
               tables={tables}
@@ -292,7 +413,7 @@ export const TablesVisual: React.FC = () => {
               readOnly={!isEditMode}
             />
           ) : (
-            <div className="p-6 overflow-auto h-full">
+            <div className="overflow-auto h-full bg-gradient-to-br from-gray-50 to-white">
               <GridView />
             </div>
           )}

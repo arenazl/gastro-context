@@ -21,10 +21,20 @@ import {
   ShoppingBag,
   ChefHat,
   Utensils,
-  Layers
+  Layers,
+  Tag,
+  DollarSign,
+  FileText,
+  Image as ImageIcon,
+  Camera,
+  MapPin,
+  User,
+  Home,
+  Building
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { PageHeader } from '../components/PageHeader';
+import { SlideDrawer } from '../components/SlideDrawer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { styles, getListItemClasses, combineClasses } from '../styles/SharedStyles';
 
@@ -53,6 +63,21 @@ interface Product {
   category_id?: number;
   subcategory_id?: number;
   available?: boolean;
+}
+
+interface NominatimResult {
+  display_name: string;
+  lat: string;
+  lon: string;
+  address?: {
+    road?: string;
+    house_number?: string;
+    city?: string;
+    town?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+  };
 }
 
 // Iconos para categorías
@@ -88,6 +113,14 @@ export const ProductsDynamic: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<number | 'all' | null>('all'); // Por defecto "todos"
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estados para la barra superior
+  const [orderType, setOrderType] = useState<'dine-in' | 'takeout' | 'delivery'>('dine-in');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [addressSearch, setAddressSearch] = useState('');
+  const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<NominatimResult | null>(null);
 
   // Estados para edición
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -96,6 +129,54 @@ export const ProductsDynamic: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+  
+  // Búsqueda de direcciones con Nominatim (OpenStreetMap)
+  const searchAddressWithNominatim = async (query: string) => {
+    if (query.length < 3) {
+      setAddressSuggestions([]);
+      return;
+    }
+
+    setSearchingAddress(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?` +
+        `q=${encodeURIComponent(query)}&` +
+        `format=json&` +
+        `addressdetails=1&` +
+        `limit=5&` +
+        `countrycodes=ar,mx,es,cl,co,pe,ec,uy,py,bo`
+      );
+      
+      if (response.ok) {
+        const data: NominatimResult[] = await response.json();
+        setAddressSuggestions(data);
+      }
+    } catch (error) {
+      console.error('Error buscando dirección:', error);
+    } finally {
+      setSearchingAddress(false);
+    }
+  };
+  
+  // Debounce para búsqueda de direcciones
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (addressSearch && addressSearch.length >= 3) {
+        searchAddressWithNominatim(addressSearch);
+      } else {
+        setAddressSuggestions([]);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [addressSearch]);
+  
+  const selectAddressSuggestion = (suggestion: NominatimResult) => {
+    setSelectedAddress(suggestion);
+    setAddressSearch(suggestion.display_name);
+    setAddressSuggestions([]);
+  };
 
   // Función de búsqueda mejorada - Movida aquí para evitar error de inicialización
   const getSearchResults = () => {
@@ -190,9 +271,9 @@ export const ProductsDynamic: React.FC = () => {
     setLoading(true);
     try {
       const [catRes, subRes, prodRes] = await Promise.all([
-        fetch(`${API_URL}/api/categories`),
-        fetch(`${API_URL}/api/subcategories`),
-        fetch(`${API_URL}/api/products`)
+        fetch(`${API_BASE_URL}/api/categories`),
+        fetch(`${API_BASE_URL}/api/subcategories`),
+        fetch(`${API_BASE_URL}/api/products`)
       ]);
 
       const [catData, subData, prodData] = await Promise.all([
@@ -263,7 +344,7 @@ export const ProductsDynamic: React.FC = () => {
         };
       }
 
-      const response = await fetch(`${API_URL}${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -293,7 +374,7 @@ export const ProductsDynamic: React.FC = () => {
         type === 'subcategory' ? `/api/subcategories/${id}` :
           `/api/products/${id}`;
 
-      const response = await fetch(`${API_URL}${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'DELETE'
       });
 
@@ -363,148 +444,396 @@ export const ProductsDynamic: React.FC = () => {
     );
   };
 
-  // Modal de edición
-  const EditModal = () => {
+  // Slide Drawer para edición con breadcrumb dinámico
+  const EditDrawer = () => {
     if (!editingItem || !editingType) return null;
 
+    // Construir breadcrumb según el contexto
+    const getBreadcrumb = () => {
+      const items = [];
+      
+      if (editingType === 'product' && selectedCategory) {
+        const category = categories.find(c => c.id === selectedCategory);
+        if (category) {
+          const CategoryIcon = getCategoryIcon(category.name);
+          items.push({
+            label: category.name,
+            icon: <CategoryIcon className="h-4 w-4" />
+          });
+        }
+        
+        if (editingItem.subcategory_id && editingItem.subcategory_id !== 'all') {
+          const subcategory = subcategories.find(s => s.id === editingItem.subcategory_id);
+          if (subcategory) {
+            items.push({
+              label: subcategory.name,
+              icon: <Layers className="h-3 w-3" />
+            });
+          }
+        }
+        
+        if (editingItem.id) {
+          items.push({ label: editingItem.name });
+        }
+      } else if (editingType === 'subcategory' && selectedCategory) {
+        const category = categories.find(c => c.id === selectedCategory);
+        if (category) {
+          const CategoryIcon = getCategoryIcon(category.name);
+          items.push({
+            label: category.name,
+            icon: <CategoryIcon className="h-4 w-4" />
+          });
+        }
+        if (editingItem.id) {
+          items.push({ label: editingItem.name });
+        }
+      } else if (editingType === 'category' && editingItem.id) {
+        items.push({ label: editingItem.name });
+      }
+      
+      return items.length > 0 ? items : undefined;
+    };
+
+    const getTitle = () => {
+      const action = editingItem.id ? 'Editar' : 'Nueva';
+      const type = editingType === 'category' ? 'Categoría' :
+                   editingType === 'subcategory' ? 'Subcategoría' : 
+                   editingType === 'product' ? 'Producto' : '';
+      return `${action} ${type}`;
+    };
+
+    const getSubtitle = () => {
+      if (editingItem.id) {
+        return `ID: #${editingItem.id}`;
+      }
+      return editingType === 'product' ? 'Complete todos los campos requeridos' :
+             editingType === 'subcategory' ? 'Agregar nueva subcategoría' :
+             'Configurar nueva categoría';
+    };
+
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-        onClick={() => {
+      <SlideDrawer
+        isOpen={true}
+        onClose={() => {
           setEditingItem(null);
           setEditingType(null);
         }}
+        title={getTitle()}
+        subtitle={getSubtitle()}
+        breadcrumb={getBreadcrumb()}
+        width="lg"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setEditingItem(null);
+                setEditingType(null);
+              }}
+              className="px-6 py-2.5 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-medium flex items-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
+              <Save className="h-4 w-4" />
+              {editingItem.id ? 'Guardar cambios' : 'Crear'}
+            </button>
+          </div>
+        }
       >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="bg-white rounded-2xl p-6 w-96 max-w-full mx-4"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h3 className="text-xl font-bold mb-4">
-            {editingItem.id ? 'Editar' : 'Crear'} {
-              editingType === 'category' ? 'Categoría' :
-                editingType === 'subcategory' ? 'Subcategoría' : 'Producto'
-            }
-          </h3>
-
-          <div className="space-y-4">
+        <div className="space-y-8">
+          {/* Información Básica */}
+          <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Package className="h-5 w-5 text-gray-600" />
+              <h4 className="text-lg font-semibold text-gray-800">Información Básica</h4>
+            </div>
+            
             <div>
-              <label className="block text-sm font-medium mb-1">Nombre</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Tag className="inline h-3 w-3 mr-1 text-gray-500" />
+                Nombre {editingType === 'product' && '*'}
+              </label>
               <input
                 type="text"
                 value={editingItem.name || ''}
                 onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                className="w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder={`Nombre del ${editingType === 'category' ? 'categoría' : editingType === 'subcategory' ? 'subcategoría' : 'producto'}`}
                 autoFocus
               />
             </div>
 
             {editingType === 'product' && (
               <>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Precio</label>
-                  <input
-                    type="number"
-                    value={editingItem.price || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    step="0.01"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <DollarSign className="inline h-3 w-3 mr-1 text-gray-500" />
+                      Precio *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        value={editingItem.price || ''}
+                        onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
+                        className="w-full pl-8 pr-3 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Disponibilidad
+                    </label>
+                    <select
+                      value={editingItem.available !== false ? 'true' : 'false'}
+                      onChange={(e) => setEditingItem({ ...editingItem, available: e.target.value === 'true' })}
+                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      <option value="true">Disponible</option>
+                      <option value="false">No disponible</option>
+                    </select>
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium mb-1">Descripción</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FileText className="inline h-3 w-3 mr-1 text-gray-500" />
+                    Descripción
+                  </label>
                   <textarea
                     value={editingItem.description || ''}
                     onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                    className="w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    placeholder="Descripción detallada del producto"
                     rows={3}
                   />
                 </div>
               </>
             )}
+          </div>
 
-            {editingType === 'category' && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Color</label>
-                <div className="flex gap-2">
-                  {['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'].map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setEditingItem({ ...editingItem, color })}
-                      className={`w-10 h-10 rounded-lg ${editingItem.color === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
+          {/* Personalización Visual */}
+          {(editingType === 'category' || editingType === 'product') && (
+            <div className={`rounded-xl p-6 space-y-4 ${
+              editingType === 'category' ? 'bg-blue-50' : 'bg-gradient-to-br from-purple-50 to-pink-50'
+            }`}>
+              <div className="flex items-center gap-2 mb-4">
+                {editingType === 'category' ? (
+                  <>
+                    <Layers className="h-5 w-5 text-blue-600" />
+                    <h4 className="text-lg font-semibold text-gray-800">Personalización</h4>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-5 w-5 text-purple-600" />
+                    <h4 className="text-lg font-semibold text-gray-800">Imagen del Producto</h4>
+                  </>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="flex justify-end gap-2 mt-6">
-            <button
-              onClick={() => {
-                setEditingItem(null);
-                setEditingType(null);
-              }}
-              className="px-4 py-2 border-2 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-colors flex items-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Guardar
-            </button>
+              {editingType === 'category' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Color de la categoría
+                  </label>
+                  <div className="flex flex-wrap gap-3">
+                    {['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => setEditingItem({ ...editingItem, color })}
+                        className={`w-12 h-12 rounded-xl transition-all transform hover:scale-110 ${
+                          editingItem.color === color ? 'ring-4 ring-offset-2 ring-gray-400 scale-110' : 'hover:ring-2 hover:ring-gray-300'
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {editingType === 'product' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <ImageIcon className="inline h-3 w-3 mr-1 text-gray-500" />
+                    URL de imagen
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.image_url || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, image_url: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="https://ejemplo.com/imagen.jpg"
+                  />
+                  {editingItem.image_url && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Vista previa</p>
+                      <div className="relative w-full h-48 bg-gray-100 rounded-xl overflow-hidden">
+                        <img
+                          src={editingItem.image_url}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://via.placeholder.com/300x200?text=Error+al+cargar';
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Estado activo */}
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={editingItem.is_active !== false}
+              onChange={(e) => setEditingItem({ ...editingItem, is_active: e.target.checked })}
+              className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
+              {editingType === 'product' ? 'Producto activo y visible' : 
+               editingType === 'subcategory' ? 'Subcategoría activa' : 
+               'Categoría activa'}
+            </label>
           </div>
-        </motion.div>
-      </motion.div>
+        </div>
+      </SlideDrawer>
     );
   };
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-      {/* Header con búsqueda integrada */}
+      {/* Header con controles de pedido - En dos filas para mejor visualización */}
       <div className="bg-white shadow-sm border-b">
-        <div className="px-6 py-4">
-          <div className="flex items-center gap-6">
-            <h1 className="text-2xl font-bold text-gray-800">Gestión Productos</h1>
-
-            <div className="relative flex-1 max-w-2xl">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                transition={{ type: "spring", stiffness: 300 }}
-                className="relative"
-              >
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar categorías, subcategorías o productos..."
-                  className="w-full pl-11 pr-11 py-2.5 text-base border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-300"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <X className="h-4 w-4 text-gray-400" />
-                  </button>
-                )}
-              </motion.div>
+        <div className="px-6 py-3 space-y-3">
+          {/* Primera fila: Título y búsqueda de productos */}
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-800 whitespace-nowrap">Gestión de Productos</h1>
+            
+            {/* Búsqueda de productos */}
+            <div className="relative flex-1 max-w-xl">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar productos, categorías o subcategorías..."
+                className="w-full pl-11 pr-11 py-2 text-base border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-300"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-4 w-4 text-gray-400" />
+                </button>
+              )}
             </div>
-
+            
             {/* Indicador de resultados */}
             {showSearchResults && (
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-600 whitespace-nowrap">
                 <span className="font-semibold text-blue-600">{searchResults.total}</span> resultados
               </span>
+            )}
+          </div>
+          
+          {/* Segunda fila: Controles de pedido */}
+          <div className="flex items-center gap-3">
+            {/* Tipo de pedido */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Tipo:</label>
+              <select
+                value={orderType}
+                onChange={(e) => setOrderType(e.target.value as 'dine-in' | 'takeout' | 'delivery')}
+                className="px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-300 text-sm"
+              >
+                <option value="dine-in">🍽️ Mesa</option>
+                <option value="takeout">🥡 Para Llevar</option>
+                <option value="delivery">🚚 Delivery</option>
+              </select>
+            </div>
+
+            {/* Búsqueda de cliente */}
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                placeholder="Buscar cliente..."
+                className="w-56 pl-9 pr-3 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-300"
+              />
+            </div>
+
+            {/* Búsqueda de dirección con autocomplete - Solo cuando es delivery */}
+            {orderType === 'delivery' && (
+              <div className="relative flex-1">
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={addressSearch}
+                  onChange={(e) => setAddressSearch(e.target.value)}
+                  placeholder="Buscar dirección de entrega..."
+                  className="w-full pl-9 pr-9 py-2 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-300"
+                />
+                {addressSearch && (
+                  <button
+                    onClick={() => {
+                      setAddressSearch('');
+                      setSelectedAddress(null);
+                      setAddressSuggestions([]);
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X className="h-3 w-3 text-gray-400" />
+                  </button>
+                )}
+                
+                {/* Dropdown de sugerencias de dirección */}
+                {addressSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 max-h-64 overflow-y-auto z-50">
+                    {addressSuggestions.map((suggestion, index) => (
+                      <button
+                        key={index}
+                        onClick={() => selectAddressSuggestion(suggestion)}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0 transition-colors"
+                      >
+                        <div className="flex items-start gap-2">
+                          <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">
+                              {suggestion.display_name.split(',')[0]}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {suggestion.display_name}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Indicador de dirección seleccionada */}
+            {selectedAddress && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-sm">
+                <MapPin className="h-3 w-3" />
+                <span className="truncate max-w-xs">📍 {selectedAddress.display_name.split(',')[0]}</span>
+              </div>
             )}
           </div>
         </div>
@@ -561,8 +890,8 @@ export const ProductsDynamic: React.FC = () => {
                         >
                           <Icon className="h-7 w-7" style={{ color: isSelected ? 'white' : category.color || '#3B82F6' }} />
                         </div>
-                        <div>
-                          <p className={`font-semibold ${isSelected ? 'text-white' : 'text-gray-800'}`}>
+                        <div className="min-w-0">
+                          <p className={`font-semibold truncate ${isSelected ? 'text-white' : 'text-gray-800'}`}>
                             {category.name}
                           </p>
                           <p className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
@@ -655,9 +984,22 @@ export const ProductsDynamic: React.FC = () => {
                 </motion.div>
 
                 {/* Subcategorías */}
-                {getFilteredSubcategories().map((subcategory) => {
+                {getFilteredSubcategories().map((subcategory, index) => {
                   const isSelected = selectedSubcategory === subcategory.id;
                   const prodCount = products.filter(p => p.subcategory_id === subcategory.id).length;
+                  
+                  // Rotar entre colores como las categorías
+                  const colorSchemes = [
+                    { gradient: 'from-blue-500 to-indigo-500', bg: 'bg-blue-100', color: '#3B82F6' },
+                    { gradient: 'from-purple-500 to-pink-500', bg: 'bg-purple-100', color: '#A855F7' },
+                    { gradient: 'from-orange-500 to-red-500', bg: 'bg-orange-100', color: '#F97316' },
+                    { gradient: 'from-green-500 to-teal-500', bg: 'bg-green-100', color: '#10B981' },
+                    { gradient: 'from-yellow-500 to-amber-500', bg: 'bg-yellow-100', color: '#F59E0B' },
+                    { gradient: 'from-cyan-500 to-blue-500', bg: 'bg-cyan-100', color: '#06B6D4' },
+                    { gradient: 'from-rose-500 to-pink-500', bg: 'bg-rose-100', color: '#F43F5E' },
+                    { gradient: 'from-indigo-500 to-purple-500', bg: 'bg-indigo-100', color: '#6366F1' }
+                  ];
+                  const colorScheme = colorSchemes[index % colorSchemes.length];
 
                   return (
                     <motion.div
@@ -669,18 +1011,18 @@ export const ProductsDynamic: React.FC = () => {
                         setSearchTerm(''); // Limpiar búsqueda
                       }}
                       className={`p-2.5 rounded-xl cursor-pointer transition-all ${isSelected
-                          ? 'bg-gradient-to-r from-green-500 to-teal-500 text-white shadow-lg'
+                          ? `bg-gradient-to-r ${colorScheme.gradient} text-white shadow-lg`
                           : 'bg-white hover:bg-gray-50 border border-gray-100'
                         }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white/30' : 'bg-green-100'
+                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white/30' : colorScheme.bg
                             }`}>
-                            <Layers className="h-6 w-6" style={{ color: isSelected ? 'white' : '#10B981' }} />
+                            <Layers className="h-6 w-6" style={{ color: isSelected ? 'white' : colorScheme.color }} />
                           </div>
-                          <div>
-                            <p className={`font-semibold ${isSelected ? 'text-white' : 'text-gray-800'}`}>
+                          <div className="min-w-0">
+                            <p className={`font-semibold truncate ${isSelected ? 'text-white' : 'text-gray-800'}`}>
                               {subcategory.name}
                             </p>
                             <p className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-500'}`}>
@@ -795,7 +1137,7 @@ export const ProductsDynamic: React.FC = () => {
                       </p>
 
                       {/* Botones en la parte inferior */}
-                      <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
+                      <div className="flex gap-2 mt-auto pt-4 pb-2 border-t border-gray-100">
                         <button
                           onClick={() => {
                             setEditingItem(product);
@@ -827,9 +1169,9 @@ export const ProductsDynamic: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal de edición */}
+      {/* Slide Drawer de edición */}
       <AnimatePresence>
-        <EditModal />
+        {(editingItem && editingType) && <EditDrawer />}
       </AnimatePresence>
 
     </div>

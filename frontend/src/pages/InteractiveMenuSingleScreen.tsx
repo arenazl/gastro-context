@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { 
+import {
   ShoppingCartIcon,
   SparklesIcon,
   XMarkIcon
@@ -43,12 +43,13 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
   const [currentView, setCurrentView] = useState<CurrentView>({ type: 'idle' });
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState<string>('');
-  const [flyingProducts, setFlyingProducts] = useState<Array<{product: Product, id: string, startPos: {x: number, y: number}}>>([]);
+  const [flyingProducts, setFlyingProducts] = useState<Array<{ product: Product, id: string, startPos: { x: number, y: number } }>>([]);
   const [activeCarousel, setActiveCarousel] = useState<'center' | 'left' | 'right'>('center');
   const [centerProduct, setCenterProduct] = useState<Product | null>(null);
   const [previousCenterProduct, setPreviousCenterProduct] = useState<Product | null>(null);
   const [pairingOrigin, setPairingOrigin] = useState<'left' | 'right' | null>(null);
-  
+  const [floatingMessage, setFloatingMessage] = useState<string | null>(null); // 🎬 MENSAJE FLOTANTE PARA SALUDOS
+
   const inputRef = useRef<HTMLInputElement>(null);
   const cartIconRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +57,26 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
     // Generar thread ID único
     const newThreadId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     setThreadId(newThreadId);
+
+    // Recuperar mensaje flotante si existe y no han pasado más de 5 segundos
+    const savedMessage = sessionStorage.getItem('floatingMessage');
+    const savedTime = sessionStorage.getItem('floatingMessageTime');
+    if (savedMessage && savedTime) {
+      const elapsed = Date.now() - parseInt(savedTime);
+      if (elapsed < 5000) {
+        setFloatingMessage(savedMessage);
+        // Programar para que desaparezca en el tiempo restante
+        setTimeout(() => {
+          setFloatingMessage(null);
+          sessionStorage.removeItem('floatingMessage');
+          sessionStorage.removeItem('floatingMessageTime');
+        }, 5000 - elapsed);
+      } else {
+        // Si ya pasaron los 5 segundos, limpiar
+        sessionStorage.removeItem('floatingMessage');
+        sessionStorage.removeItem('floatingMessageTime');
+      }
+    }
   }, []);
 
   const selectProductAndGetPairings = async (product: Product, fromSide?: 'left' | 'right') => {
@@ -72,7 +93,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       setPreviousCenterProduct(null);
       setPairingOrigin(null);
     }
-    
+
     // Mostrar el producto seleccionado
     setCurrentView({
       type: 'product-selected',
@@ -96,17 +117,17 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
       const data = await response.json();
       console.log('Maridajes recibidos:', data);
-      
+
       // Dividir maridajes en dos grupos (izquierda y derecha)
       const allPairings = data.pairings || [];
       const midPoint = Math.ceil(allPairings.length / 2);
-      
-      console.log('Maridajes procesados:', { 
+
+      console.log('Maridajes procesados:', {
         total: allPairings.length,
         left: allPairings.slice(0, midPoint),
         right: allPairings.slice(midPoint)
       });
-      
+
       setCurrentView(prev => ({
         ...prev,
         pairings: {
@@ -136,15 +157,15 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       setCart(prev => {
         const existing = prev.find(item => item.product.id === product.id);
         if (existing) {
-          return prev.map(item => 
-            item.product.id === product.id 
+          return prev.map(item =>
+            item.product.id === product.id
               ? { ...item, quantity: item.quantity + 1 }
               : item
           );
         }
         return [...prev, { product, quantity: 1 }];
       });
-      
+
       // Eliminar producto volador
       setFlyingProducts(prev => prev.filter(p => p.id !== flyId));
     }, 600);
@@ -176,13 +197,30 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         });
 
         const data = await response.json();
-        
-        setCurrentView({
-          type: 'response',
-          aiResponse: data.response,
-          categorizedProducts: data.categorizedProducts,
-          products: data.recommendedProducts
-        });
+
+        // 🎬 SI ES SALUDO CON MENSAJE FLOTANTE - USANDO SESSIONSTORAGE
+        if (data.query_type === 'greeting' && data.show_animated_message) {
+          setFloatingMessage(data.response);
+          // También guardar en sessionStorage para persistir entre re-renders
+          sessionStorage.setItem('floatingMessage', data.response);
+          sessionStorage.setItem('floatingMessageTime', Date.now().toString());
+          // Hacer que desaparezca a los 5 segundos
+          setTimeout(() => {
+            setFloatingMessage(null);
+            sessionStorage.removeItem('floatingMessage');
+            sessionStorage.removeItem('floatingMessageTime');
+          }, 5000);
+          // Poner vista idle para no romper el renderizado
+          setCurrentView({ type: 'idle' });
+        } else {
+          // Respuesta normal
+          setCurrentView({
+            type: 'response',
+            aiResponse: data.response,
+            categorizedProducts: data.categorizedProducts || {},
+            products: data.recommendedProducts || []
+          });
+        }
       } catch (error) {
         console.error('Error:', error);
       } finally {
@@ -201,7 +239,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
           <motion.div
             key={i}
             className="absolute w-2 h-2 bg-white/20 rounded-full"
-            initial={{ 
+            initial={{
               x: Math.random() * window.innerWidth,
               y: Math.random() * window.innerHeight
             }}
@@ -219,7 +257,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       </div>
 
       {/* Carrito flotante */}
-      <motion.div 
+      <motion.div
         ref={cartIconRef}
         className="fixed top-8 right-8 z-50"
         whileHover={{ scale: 1.1 }}
@@ -242,27 +280,31 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       </motion.div>
 
       {/* Productos volando al carrito */}
+
+      //cheqyear array
+
       <AnimatePresence>
         {Array.isArray(flyingProducts) && flyingProducts.map(({ product, id, startPos }) => {
+
           const cartPos = cartIconRef.current?.getBoundingClientRect();
           return (
             <motion.div
               key={id}
               className="fixed z-50 pointer-events-none"
-              initial={{ 
+              initial={{
                 x: startPos.x,
                 y: startPos.y,
                 scale: 1,
                 opacity: 1
               }}
-              animate={{ 
+              animate={{
                 x: cartPos?.left || window.innerWidth - 100,
                 y: cartPos?.top || 50,
                 scale: 0.2,
                 opacity: 0.8
               }}
               exit={{ opacity: 0 }}
-              transition={{ 
+              transition={{
                 duration: 0.6,
                 ease: "easeInOut"
               }}
@@ -315,7 +357,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               exit={{ opacity: 0, y: -50, scale: 1.2 }}
               className="text-center"
             >
-              <motion.h2 
+              <motion.h2
                 className="text-6xl font-bold text-white"
                 animate={{ scale: [1, 1.05, 1] }}
                 transition={{ duration: 1, repeat: Infinity }}
@@ -329,7 +371,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                       key={i}
                       className="w-4 h-4 bg-white rounded-full"
                       animate={{ y: [0, -20, 0] }}
-                      transition={{ 
+                      transition={{
                         duration: 0.6,
                         delay: i * 0.1,
                         repeat: Infinity
@@ -350,7 +392,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               className="w-full max-w-6xl"
             >
               {/* Respuesta de la IA */}
-              <motion.h2 
+              <motion.h2
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="text-3xl font-bold text-white text-center mb-8"
@@ -371,7 +413,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                           {products.length} opciones
                         </span>
                       </div>
-                      
+
                       <div className="category-products">
                         <div className="products-grid-accordion">
                           {products.map((product) => (
@@ -383,12 +425,12 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                               className="inline-block"
                               style={{ minWidth: '200px' }}
                             >
-                              <div 
+                              <div
                                 className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-3 cursor-pointer hover:shadow-xl transition-shadow h-[280px] flex flex-col"
                                 onClick={() => selectProductAndGetPairings(product)}
                               >
                                 {product.image_url ? (
-                                  <img 
+                                  <img
                                     src={product.image_url}
                                     alt={product.name}
                                     className="w-full h-36 object-cover rounded-lg mb-2 flex-shrink-0"
@@ -434,9 +476,8 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             >
               {/* Carrusel izquierdo de maridajes */}
               <motion.div
-                className={`absolute left-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${
-                  activeCarousel === 'left' ? 'z-30 scale-110' : 'z-10 scale-90 opacity-70'
-                }`}
+                className={`absolute left-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${activeCarousel === 'left' ? 'z-30 scale-110' : 'z-10 scale-90 opacity-70'
+                  }`}
                 onMouseEnter={() => setActiveCarousel('left')}
                 animate={{
                   x: activeCarousel === 'left' ? 200 : 0,
@@ -450,39 +491,39 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                     {currentView.pairings?.left.map((pairing: any, index: number) => {
                       console.log('Pairing izquierdo:', pairing);
                       return (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.1 }}
-                        className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
-                        onClick={() => selectProductAndGetPairings(pairing, 'left')}
-                      >
-                        {pairing.image_url ? (
-                          <img 
-                            src={pairing.image_url}
-                            alt={pairing.name}
-                            className="w-16 h-16 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-sm truncate">{pairing.name}</h4>
-                          <p className="text-xs text-gray-600 truncate">{pairing.description}</p>
-                          <span className="text-purple-600 font-bold text-sm">${typeof pairing.price === 'number' ? pairing.price.toFixed(2) : '0.00'}</span>
-                        </div>
-                      </motion.div>
-                    )})}
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
+                          onClick={() => selectProductAndGetPairings(pairing, 'left')}
+                        >
+                          {pairing.image_url ? (
+                            <img
+                              src={pairing.image_url}
+                              alt={pairing.name}
+                              className="w-16 h-16 object-cover rounded"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-sm truncate">{pairing.name}</h4>
+                            <p className="text-xs text-gray-600 truncate">{pairing.description}</p>
+                            <span className="text-purple-600 font-bold text-sm">${typeof pairing.price === 'number' ? pairing.price.toFixed(2) : '0.00'}</span>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
                   </div>
                 </div>
               </motion.div>
 
               {/* Producto central seleccionado */}
               <motion.div
-                className={`relative z-20 transition-all duration-500 ${
-                  activeCarousel === 'center' ? 'scale-100' : 'scale-90'
-                }`}
+                className={`relative z-20 transition-all duration-500 ${activeCarousel === 'center' ? 'scale-100' : 'scale-90'
+                  }`}
                 onMouseEnter={() => setActiveCarousel('center')}
                 animate={{
                   scale: activeCarousel === 'center' ? 1 : 0.95
@@ -490,7 +531,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               >
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md">
                   {currentView.selectedProduct.image_url ? (
-                    <img 
+                    <img
                       src={currentView.selectedProduct.image_url}
                       alt={currentView.selectedProduct.name}
                       className="w-full h-64 object-cover rounded-2xl mb-4"
@@ -518,9 +559,8 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
               {/* Carrusel derecho de maridajes */}
               <motion.div
-                className={`absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${
-                  activeCarousel === 'right' ? 'z-30 scale-110' : 'z-10 scale-90 opacity-70'
-                }`}
+                className={`absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${activeCarousel === 'right' ? 'z-30 scale-110' : 'z-10 scale-90 opacity-70'
+                  }`}
                 onMouseEnter={() => setActiveCarousel('right')}
                 animate={{
                   x: activeCarousel === 'right' ? -200 : 0,
@@ -534,30 +574,31 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                     {currentView.pairings?.right.map((pairing: any, index: number) => {
                       console.log('Pairing derecho:', pairing);
                       return (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.1 }}
-                        className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
-                        onClick={() => selectProductAndGetPairings(pairing, 'left')}
-                      >
-                        {pairing.image_url ? (
-                          <img 
-                            src={pairing.image_url}
-                            alt={pairing.name}
-                            className="w-16 h-16 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-sm truncate">{pairing.name}</h4>
-                          <p className="text-xs text-gray-600 truncate">{pairing.description}</p>
-                          <span className="text-purple-600 font-bold text-sm">${typeof pairing.price === 'number' ? pairing.price.toFixed(2) : '0.00'}</span>
-                        </div>
-                      </motion.div>
-                    )})}
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
+                          onClick={() => selectProductAndGetPairings(pairing, 'left')}
+                        >
+                          {pairing.image_url ? (
+                            <img
+                              src={pairing.image_url}
+                              alt={pairing.name}
+                              className="w-16 h-16 object-cover rounded"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-sm truncate">{pairing.name}</h4>
+                            <p className="text-xs text-gray-600 truncate">{pairing.description}</p>
+                            <span className="text-purple-600 font-bold text-sm">${typeof pairing.price === 'number' ? pairing.price.toFixed(2) : '0.00'}</span>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
                   </div>
                 </div>
               </motion.div>
@@ -579,7 +620,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       </div>
 
       {/* Input fijo abajo */}
-      <motion.div 
+      <motion.div
         className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/50 to-transparent"
         style={{ zIndex: 100 }}
       >
@@ -589,7 +630,10 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               ref={inputRef}
               type="text"
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
+              onChange={(e) => {
+                console.log("📝 Escribiendo:", e.target.value);
+                setUserInput(e.target.value);
+              }}
               onKeyPress={(e) => e.key === 'Enter' && handleUserInput()}
               placeholder="Escribí qué tenés ganas..."
               className="w-full px-6 py-4 pr-14 text-lg bg-white/90 backdrop-blur-md border-2 border-purple-400 rounded-2xl focus:outline-none focus:ring-4 focus:ring-purple-400 focus:border-transparent transition-all"
@@ -598,7 +642,12 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={handleUserInput}
+              onClick={() => {
+                console.log("🔴🔴🔴 BOTÓN CLICKEADO 🔴🔴🔴");
+                console.log("userInput actual:", userInput);
+                console.log("isLoading:", isLoading);
+                handleUserInput();
+              }}
               disabled={isLoading || !userInput.trim()}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -607,6 +656,52 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* 🎬 MENSAJE FLOTANTE PARA SALUDOS */}
+      <AnimatePresence>
+        {floatingMessage && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: -50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: -50 }}
+            transition={{
+              type: "spring",
+              damping: 15,
+              stiffness: 300,
+              duration: 0.6
+            }}
+            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50"
+            style={{ zIndex: 9999 }}
+          >
+            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl px-10 py-8 shadow-2xl max-w-2xl text-center">
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="text-5xl md:text-6xl font-bold text-white mb-3"
+                style={{
+                  textShadow: "0 4px 6px rgba(0,0,0,0.3)",
+                  fontFamily: "'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+                }}
+              >
+                {floatingMessage}
+              </motion.p>
+
+              {/* Barra de progreso que se desvanece */}
+              <motion.div
+                initial={{ scaleX: 1 }}
+                animate={{ scaleX: 0 }}
+                transition={{
+                  duration: 5,
+                  ease: "linear"
+                }}
+                className="h-1 bg-white/30 rounded-full mt-4 mx-auto w-48"
+                style={{ transformOrigin: "left" }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

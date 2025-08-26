@@ -18,15 +18,23 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 from urllib.parse import urlparse, parse_qs
+
+# Cargar variables de entorno desde .env si existe (para desarrollo local)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Variables de entorno cargadas desde .env")
+except ImportError:
+    print("ℹ️ python-dotenv no instalado, usando variables de entorno del sistema")
 # from crash_diagnostics import CrashDiagnostics
 # from mercadopago_config import create_payment_preference, process_webhook
-# import google.generativeai as genai
+# import google.generativeai as genai  # Se importa condicionalmente más abajo
 
 # Usar puerto de Heroku si está disponible, sino usar 9002 para desarrollo local
 PORT = int(os.environ.get('PORT', 9002))
 
-# Configurar Gemini AI
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+# Configurar Gemini AI - DEBE estar en variable de entorno
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
 # Solo configurar si hay API key disponible
 if GEMINI_API_KEY:
     try:
@@ -1662,7 +1670,8 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                         'response': user_intent.get('response_text', '¡Hola! 👋 ¡Bienvenido! ¿En qué te puedo ayudar hoy? Puedo mostrarte nuestras especialidades, recomendarte algo rico o contarte sobre cualquier plato del menú.'),
                         'recommendedProducts': [],  # NO enviar productos en saludos
                         'status': 'success',
-                        'query_type': 'greeting'
+                        'query_type': 'greeting',
+                        'show_animated_message': user_intent.get('show_animated_message', False)  # 🎬 PASAR BANDERA VISUAL
                     })
                     return
                 
@@ -3837,36 +3846,65 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
     def interpret_user_intent_with_ai_persistent(self, user_message, thread_id, context=None):
         """Interpretar intención usando contexto persistente (como ChatGPT)"""
         
-        # 🎯 DETECCIÓN RÁPIDA DE SALUDOS SIN IA (Fallback)
+        # 🔍 LOGGING DETALLADO - INICIO
+        logger.info(f"[AI_INTENT] ========== NUEVA CONSULTA ==========")
+        logger.info(f"[AI_INTENT] Thread ID: {thread_id}")
+        logger.info(f"[AI_INTENT] Mensaje usuario: '{user_message}'")
+        logger.info(f"[AI_INTENT] Contexto recibido: {context}")
+        
+        # 🎯 DETECCIÓN RÁPIDA DE SALUDOS SIN IA (Fallback) - REFORZADA
         message_lower = user_message.lower().strip()
+        logger.debug(f"[AI_INTENT] Mensaje normalizado: '{message_lower}'")
         
-        # Patrones de saludos comunes
+        # Patrones de saludos comunes - MÁS ROBUSTOS
         greeting_patterns = [
-            'hola', 'hi', 'hey', 'hello',
+            'hola', 'hi', 'hey', 'hello', 'holi',
             'buenos dias', 'buen dia', 'buenas tardes', 'buenas noches',
-            'que tal', 'como estas', 'como andas', 'como va',
-            'buenas', 'saludos', 'qué onda'
+            'que tal', 'como estas', 'como andas', 'como va', 'como anda',
+            'buenas', 'saludos', 'qué onda', 'onda', 'buenass'
         ]
+        logger.debug(f"[AI_INTENT] Verificando contra {len(greeting_patterns)} patrones de saludo")
         
-        # Verificar si es un saludo
+        # REGLA CRÍTICA: Si el mensaje es SOLO un saludo (sin otras palabras de comida)
+        # NO debe procesar productos ni llamar a la IA
+        is_pure_greeting = False
+        
+        # Verificar si es un saludo puro
         for pattern in greeting_patterns:
-            if pattern in message_lower or message_lower.startswith(pattern):
-                # Respuestas variadas para saludos
-                greeting_responses = [
-                    "¡Hola! 👋 ¿Cómo estás? ¿En qué te puedo ayudar?",
-                    "¡Hola! ¿Cómo andás? Espero que bien.",
-                    "¡Buen día! ¿En qué te puedo ayudar?",
-                    "¡Hola! ¿Qué tal? ¿Tenés ganas de algo en especial?",
-                    "¡Buenas! ¿Cómo va todo? ¿Qué se te antoja hoy?"
-                ]
-                import random
-                return {
-                    'intent_type': 'greeting',
-                    'target_product': None,
-                    'response_text': random.choice(greeting_responses),
-                    'confidence': 100,
-                    'recommended_products': []
-                }
+            if (pattern == message_lower or 
+                message_lower.startswith(pattern + ' ') or 
+                message_lower.startswith(pattern + '!') or
+                message_lower.startswith(pattern + '?') or
+                message_lower.endswith(' ' + pattern) or
+                message_lower.endswith('!' + pattern) or
+                message_lower.endswith('?' + pattern)):
+                is_pure_greeting = True
+                break
+        
+        # Si es saludo puro, responder inmediatamente SIN procesar
+        if is_pure_greeting:
+            # Respuestas variadas para saludos - CON MENSAJE VISUAL
+            greeting_responses = [
+                "¡Hola! 👋 ¿Qué te gustaría comer hoy?",
+                "¡Hola! ¿Cómo andás? ¿Qué se te antoja?", 
+                "¡Buenas! ¿En qué te puedo ayudar hoy?",
+                "¡Hola! ¿Tenés ganas de algo en especial?",
+                "¡Qué tal! ¿Qué te provoca comer?"
+            ]
+            import random
+            greeting_msg = random.choice(greeting_responses)
+            return {
+                'intent_type': 'greeting',
+                'target_product': None,
+                'response_text': '',  # No enviar texto suelto que rompa la UI
+                'confidence': 100,
+                'recommended_products': [{
+                    'id': 'greeting_message',
+                    'name': greeting_msg,
+                    'is_greeting': True,
+                    'show_animated_message': True
+                }]
+            }
         
         # Patrones de charla casual
         casual_patterns = [
@@ -3897,7 +3935,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                genai.configure(api_key=GEMINI_API_KEY)
                 self._genai_configured = True
             
             # Obtener thread con contexto persistente
@@ -4063,7 +4101,7 @@ RESPONDE SOLO JSON:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                genai.configure(api_key=GEMINI_API_KEY)
                 self._genai_configured = True
             
             # Buscar productos que podrían coincidir con el mensaje
@@ -4182,7 +4220,7 @@ RESPONDE SOLO JSON:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                genai.configure(api_key=GEMINI_API_KEY)
                 self._genai_configured = True
             
             # Preparar lista de ingredientes reales
@@ -4228,7 +4266,7 @@ RESPONDE:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                genai.configure(api_key=GEMINI_API_KEY)
                 self._genai_configured = True
             
             # Obtener TODAS las categorías disponibles dinámicamente
@@ -4269,7 +4307,7 @@ Te recomiendo: [productos que complementen]"
 INTERPRETA DINÁMICAMENTE Y RESPONDE:"""            
             
             model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
+            response = "Bueno, empecemos con estas opciones populares... "
             
             # Seleccionar productos mencionados en la respuesta
             response_text = response.text.strip()
@@ -4321,7 +4359,7 @@ INTERPRETA DINÁMICAMENTE Y RESPONDE:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                genai.configure(api_key=GEMINI_API_KEY)
                 self._genai_configured = True
             
             # Obtener TODAS las categorías disponibles dinámicamente
@@ -5206,7 +5244,7 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"wine/beverage/
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key='AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+                genai.configure(api_key=GEMINI_API_KEY)
                 self._genai_configured = True
             
             # Obtener categorías disponibles para análisis inteligente

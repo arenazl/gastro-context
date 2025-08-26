@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import {
   PlusCircle, 
@@ -20,13 +20,16 @@ import {
   Check,
   ChevronDown,
   Move,
-  Plus
+  Plus,
+  Upload,
+  Camera
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import * as fas from '@fortawesome/free-solid-svg-icons';
 import { PageHeader } from '../components/PageHeader';
 import { FloatingButton } from '../components/AnimatedComponents';
+import { SlideDrawer } from '../components/SlideDrawer';
 
 
 // Helper para renderizar iconos de FontAwesome o emojis
@@ -331,8 +334,8 @@ export const ProductsManagement: React.FC = () => {
     try {
       const method = editingCategory ? 'PUT' : 'POST';
       const url = editingCategory 
-        ? `${API_URL}/api/categories/${editingCategory.id}`
-        : `${API_URL}/api/categories`;
+        ? `${API_BASE_URL}/api/categories/${editingCategory.id}`
+        : `${API_BASE_URL}/api/categories`;
       
       const response = await fetch(url, {
         method,
@@ -368,7 +371,7 @@ export const ProductsManagement: React.FC = () => {
     }
   };
 
-  // Componente de Modal de Categoría
+  // Componente de Modal de Categoría - PANEL LATERAL
   const CategoryModal = () => {
     const [formData, setFormData] = useState<Partial<Category>>(
       editingCategory || { name: '', icon: '', color: '#4F46E5', is_active: true }
@@ -378,20 +381,35 @@ export const ProductsManagement: React.FC = () => {
       '🍔', '🍕', '🥗', '🍝', '🥤', '🍰', '☕', '🍷', '🍺', '🥘', '🍜', '🍱'
     ];
 
+    const handleClose = () => {
+      setShowCategoryModal(false);
+      setEditingCategory(null);
+    };
+
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-6 w-full max-w-md">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold">
-              {editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
-            </h3>
-            <button onClick={() => {
-              setShowCategoryModal(false);
-              setEditingCategory(null);
-            }}>
-              <X className="h-5 w-5" />
+      <SlideDrawer
+        isOpen={showCategoryModal}
+        onClose={handleClose}
+        title={editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
+        width="md"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => handleSaveCategory(formData)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Guardar
             </button>
           </div>
+        }
+      >
 
           <div className="space-y-4">
             <div>
@@ -454,26 +472,7 @@ export const ProductsManagement: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 mt-6">
-            <button
-              onClick={() => handleSaveCategory(formData)}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Guardar
-            </button>
-            <button
-              onClick={() => {
-                setShowCategoryModal(false);
-                setEditingCategory(null);
-              }}
-              className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      </div>
+      </SlideDrawer>
     );
   };
 
@@ -943,6 +942,448 @@ export const ProductsManagement: React.FC = () => {
     );
   };
 
+  // Componente Modal de Producto con Upload de Imágenes - PANEL LATERAL DESLIZANTE
+  const ProductModalWithUpload = ({ isOpen, onClose, product, categories, subcategories, onSave }) => {
+    const [formData, setFormData] = useState(
+      product || {
+        name: '',
+        description: '',
+        price: 0,
+        category_id: null,
+        subcategory_id: null,
+        image_url: '',
+        is_available: true,
+        preparation_time: 15,
+        tags: []
+      }
+    );
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(product?.image_url || '');
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploadMethod, setUploadMethod] = useState('url'); // 'url' o 'file'
+    const [isAnimating, setIsAnimating] = useState(false);
+    
+    // Efecto para manejar la animación de entrada
+    useEffect(() => {
+      if (isOpen) {
+        setTimeout(() => setIsAnimating(true), 10);
+      } else {
+        setIsAnimating(false);
+      }
+    }, [isOpen]);
+
+    // Manejo del drag & drop
+    const handleDragEnter = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(true);
+    };
+
+    const handleDragLeave = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+    };
+
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        handleFileSelect(files[0]);
+      }
+    };
+
+    const handleFileSelect = (file) => {
+      // Validar tipo de archivo
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error('Solo se permiten imágenes (JPG, PNG, WebP)');
+        return;
+      }
+
+      // Validar tamaño (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('La imagen no debe superar los 5MB');
+        return;
+      }
+
+      setImageFile(file);
+      setUploadMethod('file');
+      
+      // Crear preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    const handleFileInput = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        handleFileSelect(file);
+      }
+    };
+
+    const handleSave = async () => {
+      try {
+        // Si hay un archivo de imagen, subirlo primero
+        let finalImageUrl = formData.image_url;
+        
+        if (imageFile) {
+          const uploadFormData = new FormData();
+          uploadFormData.append('file', imageFile);
+          
+          const uploadResponse = await fetch(`${API_BASE_URL}/api/upload/image`, {
+            method: 'POST',
+            body: uploadFormData
+          });
+          
+          if (!uploadResponse.ok) throw new Error('Error al subir imagen');
+          
+          const { url } = await uploadResponse.json();
+          finalImageUrl = url;
+        }
+
+        const productData = {
+          ...formData,
+          image_url: finalImageUrl
+        };
+
+        await onSave(productData);
+        onClose();
+      } catch (error) {
+        console.error('Error saving product:', error);
+        toast.error('Error al guardar el producto');
+      }
+    };
+
+    // Construir breadcrumb basado en la categoría y subcategoría seleccionadas
+    const getBreadcrumb = () => {
+      const items = [];
+      
+      if (formData.category_id) {
+        const category = categories.find(c => c.id === formData.category_id);
+        if (category) {
+          items.push({
+            label: category.name,
+            icon: renderCategoryIcon(category.icon)
+          });
+        }
+      }
+      
+      if (formData.subcategory_id) {
+        const subcategory = subcategories.find(s => s.id === formData.subcategory_id);
+        if (subcategory) {
+          items.push({
+            label: subcategory.name
+          });
+        }
+      }
+      
+      if (product) {
+        items.push({
+          label: product.name
+        });
+      }
+      
+      return items.length > 0 ? items : undefined;
+    };
+
+    return (
+      <SlideDrawer
+        isOpen={isOpen}
+        onClose={onClose}
+        title={product ? 'Editar Producto' : 'Nuevo Producto'}
+        subtitle={product ? `ID: #${product.id}` : 'Complete los datos del producto'}
+        breadcrumb={getBreadcrumb()}
+        width="lg"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-medium flex items-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
+              <Save className="h-4 w-4" />
+              {product ? 'Guardar cambios' : 'Crear producto'}
+            </button>
+          </div>
+        }
+      >
+
+          <div className="space-y-8">
+            {/* Información básica */}
+            <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Package className="h-5 w-5 text-gray-600" />
+                <h4 className="text-lg font-semibold text-gray-800">Información Básica</h4>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre del producto *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ej: Hamburguesa Clásica"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  rows={3}
+                  placeholder="Descripción detallada del producto..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Precio *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      value={formData.price}
+                      onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
+                      className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tiempo de preparación (min)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.preparation_time}
+                    onChange={(e) => setFormData({...formData, preparation_time: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Categorización */}
+            <div className="bg-blue-50 rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Layers className="h-5 w-5 text-blue-600" />
+                <h4 className="text-lg font-semibold text-gray-800">Categorización</h4>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Tag className="inline h-3 w-3 mr-1 text-gray-500" />
+                    Categoría *
+                  </label>
+                  <select
+                    value={formData.category_id || ''}
+                    onChange={(e) => setFormData({...formData, category_id: e.target.value ? parseInt(e.target.value) : null, subcategory_id: null})}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white hover:border-gray-300"
+                  >
+                    <option value="">Seleccionar categoría</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Layers className="inline h-3 w-3 mr-1 text-gray-500" />
+                    Subcategoría
+                  </label>
+                  <select
+                    value={formData.subcategory_id || ''}
+                    onChange={(e) => setFormData({...formData, subcategory_id: e.target.value ? parseInt(e.target.value) : null})}
+                    className={`w-full px-4 py-2.5 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white ${
+                      !formData.category_id 
+                        ? 'border-gray-100 bg-gray-50 cursor-not-allowed' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    disabled={!formData.category_id}
+                  >
+                    <option value="">
+                      {!formData.category_id ? 'Primero selecciona una categoría' : 'Seleccionar subcategoría'}
+                    </option>
+                    {formData.category_id && subcategories
+                      .filter(sub => sub.category_id === formData.category_id)
+                      .map(sub => (
+                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Imagen del producto */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Camera className="h-5 w-5 text-purple-600" />
+                <h4 className="text-lg font-semibold text-gray-800">Imagen del Producto</h4>
+              </div>
+              
+              {/* Tabs para método de subida */}
+              <div className="flex gap-2 border-b border-gray-200">
+                <button
+                  onClick={() => setUploadMethod('url')}
+                  className={`px-4 py-2 font-medium transition-colors ${
+                    uploadMethod === 'url' 
+                      ? 'text-blue-600 border-b-2 border-blue-600' 
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  URL de imagen
+                </button>
+                <button
+                  onClick={() => setUploadMethod('file')}
+                  className={`px-4 py-2 font-medium transition-colors ${
+                    uploadMethod === 'file' 
+                      ? 'text-blue-600 border-b-2 border-blue-600' 
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Subir archivo
+                </button>
+              </div>
+
+              {/* URL Input */}
+              {uploadMethod === 'url' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL de la imagen
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.image_url}
+                    onChange={(e) => {
+                      setFormData({...formData, image_url: e.target.value});
+                      setImagePreview(e.target.value);
+                    }}
+                    className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="https://ejemplo.com/imagen.jpg"
+                  />
+                </div>
+              )}
+
+              {/* File Upload con Drag & Drop */}
+              {uploadMethod === 'file' && (
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-xl p-8 transition-all ${
+                    isDragging 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    onChange={handleFileInput}
+                    accept="image/*"
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  
+                  <label
+                    htmlFor="file-upload"
+                    className="flex flex-col items-center justify-center cursor-pointer"
+                  >
+                    <Upload className={`h-12 w-12 mb-4 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      {isDragging 
+                        ? 'Suelta la imagen aquí' 
+                        : 'Arrastra una imagen o haz clic para seleccionar'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      PNG, JPG o WebP hasta 5MB
+                    </p>
+                  </label>
+
+                  {imageFile && (
+                    <div className="mt-4 text-sm text-gray-600 text-center">
+                      <p className="font-medium">{imageFile.name}</p>
+                      <p className="text-xs">{(imageFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Preview de imagen */}
+              {imagePreview && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Vista previa</p>
+                  <div className="relative w-full h-48 bg-gray-100 rounded-xl overflow-hidden">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src = 'https://via.placeholder.com/300x200?text=Error+al+cargar';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Estado del producto */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="available"
+                checked={formData.is_available}
+                onChange={(e) => setFormData({...formData, is_available: e.target.checked})}
+                className="mr-2"
+              />
+              <label htmlFor="available" className="text-sm font-medium text-gray-700">
+                Producto disponible
+              </label>
+            </div>
+          </div>
+        </div>
+      </SlideDrawer>
+    );
+  };
+
+  // COMPONENTE PRINCIPAL - ProductsManagement
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <style>{animationStyles}</style>
@@ -1156,20 +1597,43 @@ export const ProductsManagement: React.FC = () => {
         </div>
       )}
       
-      {/* Modal de producto (simplificado) */}
+      {/* Modal de producto con DRAG & DROP */}
       {showProductModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-4">
-              {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-            </h3>
-            {/* Contenido del modal... */}
-            <button onClick={() => {
-              setShowProductModal(false);
-              setEditingProduct(null);
-            }}>Cerrar</button>
-          </div>
-        </div>
+        <ProductModalWithUpload 
+          isOpen={showProductModal}
+          onClose={() => {
+            setShowProductModal(false);
+            setEditingProduct(null);
+          }}
+          product={editingProduct}
+          categories={categories}
+          subcategories={subcategories}
+          onSave={async (productData) => {
+            // Guardar producto
+            try {
+              const url = editingProduct 
+                ? `${API_ENDPOINTS.products}/${editingProduct.id}`
+                : API_ENDPOINTS.products;
+              
+              const method = editingProduct ? 'PUT' : 'POST';
+              
+              const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(productData)
+              });
+              
+              if (response.ok) {
+                toast.success(editingProduct ? 'Producto actualizado' : 'Producto creado');
+                setShowProductModal(false);
+                setEditingProduct(null);
+                loadInitialData(); // Recargar productos
+              }
+            } catch (error) {
+              toast.error('Error al guardar el producto');
+            }
+          }}
+        />
       )}
     </div>
   );

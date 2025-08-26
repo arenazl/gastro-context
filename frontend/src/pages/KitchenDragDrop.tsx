@@ -154,7 +154,7 @@ export const KitchenDragDrop: React.FC = () => {
       setLoading(true);
       
       // Cargar órdenes nuevas (no en cocina aún)
-      const ordersResponse = await fetch(`${API_URL}/api/orders`);
+      const ordersResponse = await fetch(`${API_BASE_URL}/api/orders`);
       const allOrders = await ordersResponse.json();
       
       // Filtrar órdenes con estado pending o preparing
@@ -163,7 +163,7 @@ export const KitchenDragDrop: React.FC = () => {
       );
 
       // Cargar items ya en la cola de cocina
-      const kitchenResponse = await fetch(`${API_URL}/api/kitchen/queue`);
+      const kitchenResponse = await fetch(`${API_BASE_URL}/api/kitchen/queue`);
       let kitchenItems: KitchenQueueItem[] = [];
       
       if (kitchenResponse.ok) {
@@ -236,7 +236,7 @@ export const KitchenDragDrop: React.FC = () => {
     try {
       // Intentar sincronizar con el servidor
       for (const item of order.items) {
-        await fetch(`${API_URL}/api/kitchen/queue`, {
+        await fetch(`${API_BASE_URL}/api/kitchen/queue`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -268,7 +268,7 @@ export const KitchenDragDrop: React.FC = () => {
 
     try {
       // Intentar sincronizar con el servidor
-      const response = await fetch(`${API_URL}/api/kitchen/queue/${itemId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/kitchen/queue/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

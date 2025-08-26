@@ -69,6 +69,8 @@ export const InteractiveMenuAI: React.FC = () => {
   const [currentStage, setCurrentStage] = useState<'ingredients' | 'pairing' | 'beverage' | 'completed'>('ingredients');
   const [waitingForUser, setWaitingForUser] = useState(false);
   const [fadeOutSteps, setFadeOutSteps] = useState(false); // Para hacer fade out cuando el usuario empiece a escribir
+  const [floatingMessage, setFloatingMessage] = useState<string | null>(null); // 🎬 MENSAJE FLOTANTE PARA SALUDOS
+  const [debugInfo, setDebugInfo] = useState<string>(''); // 🐛 INFO DE DEBUG
   const inputRef = useRef<HTMLInputElement>(null);
   const pairingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const beverageTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -411,18 +413,63 @@ export const InteractiveMenuAI: React.FC = () => {
 
       const data = await response.json();
       
+      // 🔍 DEBUG: Ver qué datos vienen del backend
+      console.log("🔍 DATOS DEL BACKEND:", {
+        query_type: data.query_type,
+        show_animated_message: data.show_animated_message,
+        response: data.response,
+        fullData: data
+      });
+      
+      console.log("🔎 CONDICIONES:", {
+        isGreeting: data.query_type === 'greeting',
+        hasAnimatedMessage: data.show_animated_message,
+        bothTrue: data.query_type === 'greeting' && data.show_animated_message
+      });
+      
       // Agregar respuesta de IA
       // 🎯 DETECTAR SI ES CONVERSACIÓN CASUAL PARA MOSTRAR DIFERENTE
       const isCasualConversation = data.query_type === 'greeting' || data.query_type === 'casual_conversation';
       
-      const aiStep: ConversationStep = {
-        id: (Date.now() + 1).toString(),
-        type: isCasualConversation ? 'casual_response' : 'response', // Usar 'casual_response' para texto grande
-        content: data.response || getLocalRecommendation(userText),
-        visible: true
-      };
+      // 🎬 VERIFICAR SI HAY MENSAJE DE SALUDO EN LOS PRODUCTOS
+      const greetingItem = data.recommendedProducts?.find(item => item.is_greeting);
       
-      setConversationSteps(prev => [...prev, aiStep]);
+      if (greetingItem && greetingItem.show_animated_message) {
+        console.log("🎬 MOSTRANDO MENSAJE FLOTANTE:", greetingItem.name);
+        setFloatingMessage(greetingItem.name);
+        setDebugInfo(`FLOTANTE: ${greetingItem.name} (${new Date().toLocaleTimeString()})`);
+        
+        // Hacer que desaparezca a los 5 segundos
+        setTimeout(() => {
+          console.log("🎬 OCULTANDO mensaje flotante");
+          setFloatingMessage(null);
+        }, 5000);
+        
+        // No procesar más, el saludo está manejado
+        setRecommendedProducts([]);
+        return;
+      } else if (data.query_type === 'greeting') {
+        console.log("🎭 SALUDO NORMAL (sin mensaje flotante)");
+        // Saludo normal sin mensaje flotante
+        const aiStep: ConversationStep = {
+          id: (Date.now() + 1).toString(),
+          type: 'casual_response',
+          content: data.response || "¡Hola! ¿En qué te puedo ayudar?",
+          visible: true
+        };
+        setConversationSteps(prev => [...prev, aiStep]);
+      } else {
+        console.log("📝 RESPUESTA NORMAL");
+        // Respuesta normal
+        const aiStep: ConversationStep = {
+          id: (Date.now() + 1).toString(),
+          type: isCasualConversation ? 'casual_response' : 'response',
+          content: data.response || getLocalRecommendation(userText),
+          visible: true
+        };
+        
+        setConversationSteps(prev => [...prev, aiStep]);
+      }
 
       // Cambiar stage según el tipo de consulta
       if (data.query_type === 'product_pairings') {
@@ -659,6 +706,8 @@ export const InteractiveMenuAI: React.FC = () => {
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
 
+  console.log("🔵🔵🔵 RENDERIZANDO InteractiveMenuAI 🔵🔵🔵");
+  
   return (
     <div className="min-h-screen overflow-hidden relative">
       {/* Fondo dinámico con imágenes rotando */}
@@ -1179,6 +1228,60 @@ export const InteractiveMenuAI: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 🎬 MENSAJE FLOTANTE PARA SALUDOS - Solo aparece cuando es greeting */}
+      <AnimatePresence>
+        {floatingMessage && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: -50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: -50 }}
+            transition={{ 
+              type: "spring", 
+              damping: 15, 
+              stiffness: 300,
+              duration: 0.6 
+            }}
+            className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50"
+          >
+            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl px-8 py-6 shadow-2xl max-w-lg text-center">
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="text-4xl md:text-5xl font-bold text-white mb-2"
+                style={{
+                  textShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                  fontFamily: "'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+                }}
+              >
+                {floatingMessage}
+              </motion.p>
+              
+              {/* Indicador de que desaparecerá */}
+              <motion.div
+                initial={{ scaleX: 1 }}
+                animate={{ scaleX: 0 }}
+                transition={{ 
+                  duration: 5, 
+                  ease: "linear" 
+                }}
+                className="h-1 bg-white/30 rounded-full mt-4"
+                style={{ transformOrigin: "left" }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🐛 DEBUG INFO EN PANTALLA */}
+      {debugInfo && (
+        <div className="fixed top-4 left-4 bg-black/80 text-white p-3 rounded-lg text-sm font-mono z-50">
+          {debugInfo}
+          <br />
+          floatingMessage: {floatingMessage || 'null'}
+        </div>
+      )}
     </div>
   );
 };

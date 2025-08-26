@@ -20,7 +20,10 @@ import {
   UserIcon,
   CreditCardIcon,
   Squares2X2Icon,
-  XMarkIcon
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 interface Category {
@@ -103,10 +106,16 @@ export const NewOrderWithCache: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [cacheIndicator, setCacheIndicator] = useState<string | null>(null);
+  const [orderNumber, setOrderNumber] = useState<number>(1);
+  const [showOrdersPanel, setShowOrdersPanel] = useState(false);
+  const [activeOrders, setActiveOrders] = useState<any[]>([]);
 
   // Cargar datos iniciales (solo categorías y mesas)
   useEffect(() => {
     loadInitialData();
+    loadActiveOrders();
+    const interval = setInterval(loadActiveOrders, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Cargar productos cuando cambia la categoría (pero NO al inicio)
@@ -135,8 +144,8 @@ export const NewOrderWithCache: React.FC = () => {
     try {
       // Cargar solo categorías y mesas, NO productos
       const [categoriesRes, tablesRes] = await Promise.all([
-        fetch(`${API_URL}/api/categories`),
-        fetch(`${API_URL}/api/tables`)
+        fetch(`${API_BASE_URL}/api/categories`),
+        fetch(`${API_BASE_URL}/api/tables`)
       ]);
 
       const [categoriesData, tablesData] = await Promise.all([
@@ -147,8 +156,8 @@ export const NewOrderWithCache: React.FC = () => {
       setCategories(categoriesData);
       setTables(tablesData);
 
-      // NO seleccionar categoría automáticamente - el usuario debe hacer clic
-      // Esto evita cargar productos al inicio
+      // Seleccionar "Todos" automáticamente para cargar todos los productos
+      setSelectedCategory('all');
     } catch (error) {
       console.error('Error cargando datos iniciales:', error);
       toast.error('Error cargando datos iniciales');
@@ -180,8 +189,8 @@ export const NewOrderWithCache: React.FC = () => {
       if (categoryId === 'all') {
         // Cargar todos los productos y subcategorías
         const [subcatRes, productsRes] = await Promise.all([
-          fetch(`${API_URL}/api/subcategories`),
-          fetch(`${API_URL}/api/products`)
+          fetch(`${API_BASE_URL}/api/subcategories`),
+          fetch(`${API_BASE_URL}/api/products`)
         ]);
 
         const [subcatData, productsData] = await Promise.all([
@@ -205,8 +214,8 @@ export const NewOrderWithCache: React.FC = () => {
       } else {
         // Cargar subcategorías y productos de la categoría específica
         const [subcatRes, productsRes] = await Promise.all([
-          fetch(`${API_URL}/api/subcategories?category_id=${categoryId}`),
-          fetch(`${API_URL}/api/products?category_id=${categoryId}`)
+          fetch(`${API_BASE_URL}/api/subcategories?category_id=${categoryId}`),
+          fetch(`${API_BASE_URL}/api/products?category_id=${categoryId}`)
         ]);
 
         const [subcatData, productsData] = await Promise.all([
@@ -236,9 +245,21 @@ export const NewOrderWithCache: React.FC = () => {
     }
   };
 
+  const loadActiveOrders = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/orders/active`);
+      if (response.ok) {
+        const orders = await response.json();
+        setActiveOrders(orders);
+      }
+    } catch (error) {
+      console.error('Error cargando órdenes activas:', error);
+    }
+  };
+
   const searchCustomers = async (query: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/customers?search=${encodeURIComponent(query)}`);
+      const response = await fetch(`${API_BASE_URL}/api/customers?search=${encodeURIComponent(query)}`);
       const data = await response.json();
       setCustomers(data);
       setShowCustomerDropdown(true);
@@ -342,7 +363,7 @@ export const NewOrderWithCache: React.FC = () => {
         payment_status: 'pending'
       };
 
-      const response = await fetch(`${API_URL}/api/orders`, {
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData)
@@ -368,6 +389,10 @@ export const NewOrderWithCache: React.FC = () => {
     setSelectedTable(null);
     setSelectedCustomer(null);
     setShowPaymentModal(false);
+    
+    // Incrementar número de orden para la próxima
+    setOrderNumber(prev => prev + 1);
+    loadActiveOrders(); // Recargar órdenes activas
 
     toast.success('¡Pago procesado exitosamente!');
 
@@ -390,9 +415,15 @@ export const NewOrderWithCache: React.FC = () => {
         <div className="">
           {/* Page Header with Actions */}
           <PageHeader
-            title="Nueva Orden"
+            title={`Nueva Orden #${orderNumber.toString().padStart(3, '0')}`}
             subtitle={cart.length > 0 ? `${cart.length} items • $${cartTotal.toFixed(2)}` : 'Selecciona productos para agregar'}
             actions={[
+              {
+                label: showOrdersPanel ? 'Ocultar órdenes' : 'Ver órdenes',
+                onClick: () => setShowOrdersPanel(!showOrdersPanel),
+                variant: 'secondary',
+                icon: showOrdersPanel ? ChevronUpIcon : ChevronDownIcon
+              },
               {
                 label: t('orders.viewCart'),
                 onClick: () => setShowCart(true),
@@ -407,6 +438,84 @@ export const NewOrderWithCache: React.FC = () => {
               }
             ]}
           />
+
+          {/* Panel de Órdenes Activas - Colapsable */}
+          <AnimatePresence>
+            {showOrdersPanel && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="bg-gradient-to-br from-gray-50 to-gray-100 border-b border-gray-200 overflow-hidden"
+              >
+                <div className="px-6 py-3">
+                  <div className="flex items-center gap-4 overflow-x-auto">
+                    {activeOrders.length > 0 ? (
+                      activeOrders.map((order) => {
+                        const getStatusColor = () => {
+                          const timeInKitchen = order.time_in_kitchen || 0;
+                          if (timeInKitchen < 10) return 'from-green-500 to-emerald-500';
+                          if (timeInKitchen < 20) return 'from-yellow-500 to-orange-500';
+                          return 'from-red-500 to-rose-500';
+                        };
+                        
+                        return (
+                          <motion.div
+                            key={order.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-white shadow-sm border border-gray-200 min-w-max`}
+                            whileHover={{ scale: 1.02 }}
+                          >
+                            <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${getStatusColor()}`} />
+                            <span className="text-sm font-medium text-gray-700">
+                              Mesa {order.table_number}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {order.time_in_kitchen || 0}min
+                            </span>
+                          </motion.div>
+                        );
+                      })
+                    ) : (
+                      <>
+                        {/* Tarjetas dummy cuando no hay órdenes */}
+                        <motion.div
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white shadow-sm border border-gray-200 min-w-max opacity-50"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 0.5 }}
+                        >
+                          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500" />
+                          <span className="text-sm font-medium text-gray-500">Mesa 5</span>
+                          <span className="text-xs text-gray-400">3min</span>
+                        </motion.div>
+                        <motion.div
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white shadow-sm border border-gray-200 min-w-max opacity-50"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 0.5 }}
+                          transition={{ delay: 0.1 }}
+                        >
+                          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500" />
+                          <span className="text-sm font-medium text-gray-500">Mesa 12</span>
+                          <span className="text-xs text-gray-400">15min</span>
+                        </motion.div>
+                        <motion.div
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white shadow-sm border border-gray-200 min-w-max opacity-50"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 0.5 }}
+                          transition={{ delay: 0.2 }}
+                        >
+                          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-red-500 to-rose-500" />
+                          <span className="text-sm font-medium text-gray-500">Mesa 3</span>
+                          <span className="text-xs text-gray-400">22min</span>
+                        </motion.div>
+                        <span className="text-xs text-gray-400 ml-2">Ejemplo - No hay órdenes activas</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="pt-6 px-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -912,7 +1021,20 @@ export const NewOrderWithCache: React.FC = () => {
 
               {/* Panel del Carrito - Simplificado */}
               <div className="sticky top-20" style={{ height: 'calc(100vh - 10rem)', marginBottom: '2rem' }}>
-                <GlassPanel delay={0.3} className="h-full flex flex-col">
+                <GlassPanel delay={0.3} className="h-full flex flex-col relative">
+                  {/* Badge de número de orden - flotante en la esquina */}
+                  <div className="absolute -top-3 -right-3 z-10">
+                    <motion.div 
+                      className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-2xl shadow-lg font-bold text-lg"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      whileHover={{ scale: 1.05 }}
+                      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                    >
+                      ORDEN #{orderNumber.toString().padStart(3, '0')}
+                    </motion.div>
+                  </div>
+                  
                   {/* Header del carrito - fijo arriba */}
                   <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: theme.colors.border, flexShrink: 0 }}>
                     <h2 className="text-lg font-medium flex items-center gap-2" style={{ color: theme.colors.text }}>

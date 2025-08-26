@@ -181,7 +181,7 @@ export const KitchenKanban: React.FC = () => {
   // Función para cargar órdenes desde el servidor
   const loadFreshData = useCallback(async () => {
     try {
-      const response = await fetch('${API_BASE_URL}/api/orders/kitchen');
+      const response = await fetch(`${API_BASE_URL}/api/orders/kitchen`);
       if (!response.ok) throw new Error('Error al cargar órdenes');
       
       const data = await response.json();
