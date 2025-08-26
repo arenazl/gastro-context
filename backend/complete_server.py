@@ -25,9 +25,16 @@ from urllib.parse import urlparse, parse_qs
 # Usar puerto de Heroku si está disponible, sino usar 9002 para desarrollo local
 PORT = int(os.environ.get('PORT', 9002))
 
-# Configurar Gemini AI (comentado por ahora)
-# GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyD7N-EUhvQ5NI9c8PTwewkuCiX8QvRVgfw')
-# genai.configure(api_key=GEMINI_API_KEY)
+# Configurar Gemini AI
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyBF7mFZh15EbMLPVQS5zTfY0Yt5XeBnGwM')
+# Solo configurar si hay API key disponible
+if GEMINI_API_KEY:
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        print(f"✅ Gemini AI configurado correctamente")
+    except Exception as e:
+        print(f"⚠️ No se pudo configurar Gemini AI: {e}")
 
 # Directorio para imágenes estáticas
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
