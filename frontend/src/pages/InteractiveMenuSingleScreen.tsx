@@ -180,15 +180,15 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
     // Agregar al carrito después de la animación
     setTimeout(() => {
       setCart(prev => {
-        const existing = prev.find(item => item.product.id === product.id);
+        const existing = prev.find(item => item.id === product.id);
         if (existing) {
           return prev.map(item =>
-            item.product.id === product.id
+            item.id === product.id
               ? { ...item, quantity: item.quantity + 1 }
               : item
           );
         }
-        return [...prev, { product, quantity: 1 }];
+        return [...prev, { ...product, quantity: 1 }];
       });
 
       // Eliminar producto volador
@@ -628,7 +628,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: index * 0.1 }}
                           className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
-                          onClick={() => selectProductAndGetPairings(pairing, 'left')}
+                          onClick={() => selectProductAndGetPairings(pairing, 'right')}
                         >
                           {pairing.image_url ? (
                             <img
@@ -821,7 +821,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                           
                           <div className="flex-1">
                             <h3 className="font-bold text-lg">{item.name}</h3>
-                            <p className="text-sm text-gray-500">${item.price.toFixed(2)} c/u</p>
+                            <p className="text-sm text-gray-500">${(item.price || 0).toFixed(2)} c/u</p>
                           </div>
                           
                           {/* Controles de cantidad */}
@@ -861,7 +861,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                           
                           <div className="text-right">
                             <p className="font-bold text-lg text-purple-600">
-                              ${(item.price * item.quantity).toFixed(2)}
+                              ${((item.price || 0) * item.quantity).toFixed(2)}
                             </p>
                           </div>
                         </motion.div>
@@ -881,7 +881,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                         animate={{ scale: 1 }}
                         className="text-3xl font-bold text-purple-600"
                       >
-                        ${cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                        ${cart.reduce((sum, item) => sum + ((item.price || 0) * item.quantity), 0).toFixed(2)}
                       </motion.span>
                     </div>
                     
