@@ -904,7 +904,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        self.send_header('Content-Type', 'application/json')
+        # NO forzar Content-Type aquí - dejar que cada método lo configure
         super().end_headers()
     
     def do_OPTIONS(self):
@@ -3487,12 +3487,14 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
     def send_json_response(self, data):
         """Send JSON response"""
         self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data, cls=DecimalEncoder).encode())
     
     def send_error_response(self, code, message):
         """Send error response"""
         self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps({'error': message}).encode())
     
