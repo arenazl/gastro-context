@@ -3553,16 +3553,22 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404)
                 return
         
-        # Obtener tipo MIME
-        mime_type, _ = mimetypes.guess_type(file_path)
-        if not mime_type:
-            if file_path.endswith('.js'):
-                mime_type = 'application/javascript'
-            elif file_path.endswith('.css'):
-                mime_type = 'text/css'
-            elif file_path.endswith('.html'):
-                mime_type = 'text/html'
-            else:
+        # Obtener tipo MIME correcto
+        if file_path.endswith('.js'):
+            mime_type = 'text/javascript; charset=utf-8'
+        elif file_path.endswith('.css'):
+            mime_type = 'text/css; charset=utf-8'
+        elif file_path.endswith('.html'):
+            mime_type = 'text/html; charset=utf-8'
+        elif file_path.endswith('.svg'):
+            mime_type = 'image/svg+xml'
+        elif file_path.endswith('.png'):
+            mime_type = 'image/png'
+        elif file_path.endswith('.jpg') or file_path.endswith('.jpeg'):
+            mime_type = 'image/jpeg'
+        else:
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type:
                 mime_type = 'application/octet-stream'
         
         # Enviar archivo
