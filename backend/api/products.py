@@ -268,7 +268,8 @@ async def get_products(
     result = await db.execute(query)
     products = result.scalars().all()
     
-    return products
+    return 
+    
 
 
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)

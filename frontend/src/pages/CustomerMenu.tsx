@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useParams } from 'react-router-dom';
+import { getProductImage } from '../utils/imageHelpers';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -295,20 +296,21 @@ export const CustomerMenu: React.FC = () => {
                 transition={{ delay: index * 0.05 }}
                 className="bg-white rounded-xl shadow-lg overflow-hidden"
               >
-                {product.image_url && (
-                  <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200 relative">
-                    <img 
-                      src={product.image_url} 
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                    />
+                <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200 relative">
+                  <img 
+                    src={getProductImage(product.name, product.image_url)} 
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = getProductImage('default');
+                    }}
+                  />
                     {product.is_popular && (
                       <span className="absolute top-2 left-2 px-2 py-1 bg-yellow-400 text-xs font-bold rounded-full">
                         ⭐ Popular
                       </span>
                     )}
                   </div>
-                )}
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-semibold text-gray-800">{product.name}</h3>

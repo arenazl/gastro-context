@@ -243,7 +243,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
       {/* Productos volando al carrito */}
       <AnimatePresence>
-        {flyingProducts.map(({ product, id, startPos }) => {
+        {Array.isArray(flyingProducts) && flyingProducts.map(({ product, id, startPos }) => {
           const cartPos = cartIconRef.current?.getBoundingClientRect();
           return (
             <motion.div

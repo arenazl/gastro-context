@@ -21,8 +21,7 @@ IMAGES_DIR = '/mnt/c/Code/gastro-context/backend/static/products'
 CATEGORY_DEFAULTS = {
     1: 'https://images.pexels.com/photos/604969/pexels-photo-604969.jpeg?auto=compress&cs=tinysrgb&w=400',  # Entradas
     2: 'https://images.pexels.com/photos/1707270/pexels-photo-1707270.jpeg?auto=compress&cs=tinysrgb&w=400', # Sopas
-    3: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=400', # Ensaladas
-    4: 'https://images.pexels.com/photos/361184/pexels-photo-361184.jpeg?auto=compress&cs=tinysrgb&w=400',  # Carnes
+    3: 'simpress&cs=tinysrgb&w=400',  # Carnes
     5: 'https://images.pexels.com/photos/725991/pexels-photo-725991.jpeg?auto=compress&cs=tinysrgb&w=400',  # Pescados
     6: 'https://images.pexels.com/photos/1437267/pexels-photo-1437267.jpeg?auto=compress&cs=tinysrgb&w=400', # Pastas
     7: 'https://images.pexels.com/photos/905847/pexels-photo-905847.jpeg?auto=compress&cs=tinysrgb&w=400',  # Pizzas
