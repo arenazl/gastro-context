@@ -2,15 +2,14 @@
 const isDevelopment = import.meta.env.MODE === 'development';
 const isProduction = import.meta.env.MODE === 'production';
 
-// Detectar si estamos en Heroku
+// Detectar si estamos en Heroku o usando HTTPS
 const isHeroku = window.location.hostname.includes('herokuapp.com');
+const isHttps = window.location.protocol === 'https:';
 
-// URL del backend según el ambiente
-export const API_BASE_URL = isHeroku 
-  ? 'https://gastro-ec0530e03436.herokuapp.com'  // Backend en Heroku (mismo servidor)
-  : isDevelopment 
-    ? 'http://172.29.228.80:9002'  // Backend local
-    : 'https://gastro-ec0530e03436.herokuapp.com';  // Producción
+// URL del backend - SIEMPRE usar HTTPS en producción
+export const API_BASE_URL = (isHeroku || isHttps || isProduction)
+  ? 'https://gastro-ec0530e03436.herokuapp.com'  // Backend en Heroku (HTTPS)
+  : 'http://172.29.228.80:9002';  // Backend local (solo desarrollo)
 
 // URLs específicas
 export const API_ENDPOINTS = {
