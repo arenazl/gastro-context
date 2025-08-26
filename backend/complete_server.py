@@ -1793,6 +1793,11 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 
                 else:
                     # Fallback: recomendaciones generales
+                    print(f"\n⚠️ FALLBACK ACTIVADO!")
+                    print(f"   Intent type no reconocido: {user_intent.get('intent_type')}")
+                    print(f"   Mensaje del usuario: '{user_message}'")
+                    print(f"   Usando primeros 4 productos como fallback")
+                    
                     recommended_products = [{
                         'id': p['id'],
                         'name': p['name'],
@@ -5648,18 +5653,53 @@ IMPORTANTE:
                 
         except Exception as e:
             logger.error(f"[AI_RECOMMENDATIONS] Error: {e}")
+            print(f"\n❌ ERROR EN generate_intelligent_recommendations:")
+            print(f"   Error: {str(e)}")
+            print(f"   Tipo: {type(e).__name__}")
+            import traceback
+            print(f"   Stack trace:")
+            traceback.print_exc()
+            print(f"⚠️ USANDO FALLBACK SIN IA - Primeros 4 productos")
         
-        # Fallback: productos variados
-        fallback_products = [{
-            'id': p['id'],
-            'name': p['name'],
-            'description': p['description'], 
-            'price': float(p['price']),
-            'category': p['category_name'],
-            'image_url': p['image_url']
-        } for p in products_data[:4]]
+        # Fallback: productos variados POR CATEGORÍA
+        print(f"\n⚠️ FALLBACK ACTIVADO en generate_intelligent_recommendations")
+        print(f"   Usando productos variados de {len(products_data)} disponibles")
         
-        return "¡Acá tenés algunas opciones deliciosas!", fallback_products
+        # Obtener productos variados de diferentes categorías
+        categorized_fallback = {}
+        used_categories = set()
+        
+        for product in products_data:
+            category = product.get('category_name')
+            if category and category not in used_categories and len(categorized_fallback) < 4:
+                if category not in categorized_fallback:
+                    categorized_fallback[category] = []
+                
+                categorized_fallback[category].append({
+                    'id': product['id'],
+                    'name': product['name'],
+                    'description': product['description'], 
+                    'price': float(product['price']),
+                    'category': category,
+                    'image_url': product['image_url']
+                })
+                used_categories.add(category)
+                
+                # Agregar más productos de la misma categoría
+                for p in products_data:
+                    if p['category_name'] == category and p['id'] != product['id'] and len(categorized_fallback[category]) < 4:
+                        categorized_fallback[category].append({
+                            'id': p['id'],
+                            'name': p['name'],
+                            'description': p['description'], 
+                            'price': float(p['price']),
+                            'category': category,
+                            'image_url': p['image_url']
+                        })
+        
+        print(f"   Fallback con categorías: {list(categorized_fallback.keys())}")
+        
+        return "¡Acá tenés algunas opciones deliciosas!", categorized_fallback
 
     def log_message(self, format, *args):
         """Override to reduce log noise"""
