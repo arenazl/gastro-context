@@ -460,6 +460,8 @@ out/
 
 # Static generation (comentado para permitir backend/static)
 # static/
+# IMPORTANTE: Permitir backend/static para Heroku
+!backend/static/
 
 # ==================================
 # Misceláneos Específicos del Negocio
