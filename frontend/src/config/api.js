@@ -2,14 +2,17 @@
 const isDevelopment = import.meta.env.MODE === 'development';
 const isProduction = import.meta.env.MODE === 'production';
 
-// Detectar si estamos en Heroku o usando HTTPS
-const isHeroku = window.location.hostname.includes('herokuapp.com');
-const isHttps = window.location.protocol === 'https:';
+// URLs desde variables de entorno o valores por defecto
+// En producción, Vite reemplazará estas variables durante el build
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (isProduction 
+    ? 'https://gastro-ec0530e03436.herokuapp.com'  // Fallback para producción
+    : 'http://172.29.228.80:9002');  // Backend local para desarrollo
 
-// URL del backend - SIEMPRE usar HTTPS en producción
-export const API_BASE_URL = (isHeroku || isHttps || isProduction)
-  ? 'https://gastro-ec0530e03436.herokuapp.com'  // Backend en Heroku (HTTPS)
-  : 'http://172.29.228.80:9002';  // Backend local (solo desarrollo)
+export const WS_BASE_URL = import.meta.env.VITE_WS_URL ||
+  (isProduction
+    ? 'wss://gastro-ec0530e03436.herokuapp.com'
+    : 'ws://172.29.228.80:9002');
 
 // URLs específicas
 export const API_ENDPOINTS = {
@@ -55,10 +58,8 @@ export const API_ENDPOINTS = {
   // Reportes
   reports: `${API_BASE_URL}/api/reports`,
   
-  // WebSocket (necesita protocolo ws/wss)
-  websocket: isHeroku 
-    ? `wss://${window.location.hostname}/ws`
-    : `ws://172.29.228.80:9002/ws`
+  // WebSocket
+  websocket: `${WS_BASE_URL}/ws`
 };
 
 // Helper para hacer requests con manejo de errores
