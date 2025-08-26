@@ -94,9 +94,6 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       setPreviousCenterProduct(null);
       setPairingOrigin(null);
     }
-    
-    // Resetear carrusel activo al centro cuando se selecciona un nuevo producto
-    setActiveCarousel('center');
 
     // Mostrar el producto seleccionado
     setCurrentView({
@@ -295,22 +292,22 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         ))}
       </div>
 
-      {/* Carrito flotante */}
+      {/* Carrito flotante - arriba a la derecha */}
       <motion.div
         ref={cartIconRef}
-        className="fixed top-8 right-8 z-50"
-        whileHover={{ scale: 1.1 }}
+        className="fixed top-4 right-4 z-50"
+        whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setShowCartModal(true)}
       >
         <div className="relative">
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 shadow-2xl cursor-pointer">
-            <ShoppingCartIcon className="w-8 h-8 text-purple-600" />
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur-md rounded-full p-3 shadow-xl cursor-pointer">
+            <ShoppingCartIcon className="w-7 h-7 text-white" />
             {cartTotal > 0 && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold"
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold shadow-lg"
               >
                 {cartTotal}
               </motion.div>
@@ -480,7 +477,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                                 <p className="text-xs text-gray-600 line-clamp-2 flex-grow">{product.description}</p>
                                 <div className="flex justify-between items-center mt-2">
                                   <span className="text-lg font-bold text-purple-600">
-                                    ${product.price.toFixed(2)}
+                                    ${(product.price || 0).toFixed(2)}
                                   </span>
                                   <motion.div
                                     whileHover={{ scale: 1.2 }}
@@ -514,18 +511,28 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             >
               {/* Carrusel izquierdo de entradas/acompañamientos */}
               <motion.div
-                className={`absolute left-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${
-                  activeCarousel === 'left' ? 'z-30' : activeCarousel === 'center' ? 'z-5 pointer-events-none' : 'z-10'
+                className={`absolute left-8 top-1/2 -translate-y-1/2 ${
+                  activeCarousel === 'left' ? 'z-30' : 'z-10'
                 }`}
                 onMouseEnter={() => setActiveCarousel('left')}
+                initial={{ opacity: 0, x: -100 }}
                 animate={{
-                  x: activeCarousel === 'center' ? -200 : activeCarousel === 'left' ? 150 : 0,
-                  scale: activeCarousel === 'left' ? 1.05 : 0.85,
-                  opacity: activeCarousel === 'center' ? 0 : 1
+                  opacity: 1,
+                  x: activeCarousel === 'left' ? 40 : 0,
+                  scale: activeCarousel === 'left' ? 1.05 : 1,
+                  y: [0, -10, 0] // Animación flotante
                 }}
-                transition={{ type: 'spring', damping: 20 }}
+                transition={{ 
+                  x: { type: 'spring', damping: 20 },
+                  scale: { type: 'spring', damping: 15 },
+                  y: { 
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }
+                }}
               >
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 w-80">
+                <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-96 shadow-2xl">
                   <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
                     <span className="text-2xl">🥗</span>
                     Entradas y Acompañamientos
@@ -536,10 +543,15 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                       return (
                         <motion.div
                           key={index}
-                          initial={{ opacity: 0, x: -20 }}
+                          initial={{ opacity: 0, x: -30 }}
                           animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
+                          transition={{ delay: index * 0.08, type: 'spring', damping: 20 }}
+                          whileHover={{ 
+                            x: 10, 
+                            scale: 1.03,
+                            transition: { duration: 0.2 }
+                          }}
+                          className="bg-white/95 rounded-lg p-3 cursor-pointer hover:bg-white transition-colors flex items-center gap-3 shadow-md"
                           onClick={() => selectProductAndGetPairings(pairing, 'left')}
                         >
                           {pairing.image_url ? (
@@ -565,14 +577,33 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
               {/* Producto central seleccionado */}
               <motion.div
-                className={`relative z-20 transition-all duration-500 ${activeCarousel === 'center' ? 'scale-100' : 'scale-90'
-                  }`}
+                className="relative z-20"
                 onMouseEnter={() => setActiveCarousel('center')}
+                initial={{ opacity: 0, scale: 0.8, y: 50 }}
                 animate={{
-                  scale: activeCarousel === 'center' ? 1 : 0.95
+                  opacity: 1,
+                  scale: activeCarousel === 'center' ? 1.05 : 1,
+                  y: activeCarousel === 'center' ? -5 : 0
+                }}
+                transition={{ 
+                  type: 'spring', 
+                  damping: 15,
+                  stiffness: 100
                 }}
               >
-                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md">
+                <motion.div 
+                  className="bg-white rounded-3xl shadow-2xl p-8 max-w-md"
+                  animate={{
+                    y: [0, -5, 0],
+                  }}
+                  transition={{
+                    y: {
+                      duration: 4,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }
+                  }}
+                >
                   {currentView.selectedProduct.image_url ? (
                     <img
                       src={currentView.selectedProduct.image_url}
@@ -586,34 +617,45 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                   <p className="text-gray-600 mb-4">{currentView.selectedProduct.description}</p>
                   <div className="flex justify-between items-center">
                     <span className="text-4xl font-bold text-purple-600">
-                      ${currentView.selectedProduct.price.toFixed(2)}
+                      ${(currentView.selectedProduct.price || 0).toFixed(2)}
                     </span>
                     <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={(e) => addToCart(currentView.selectedProduct!, e)}
-                      className="bg-purple-600 text-white px-6 py-3 rounded-xl font-semibold"
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg"
                     >
                       Agregar al carrito
                     </motion.button>
                   </div>
-                </div>
+                </motion.div>
               </motion.div>
 
               {/* Carrusel derecho de bebidas */}
               <motion.div
-                className={`absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${
-                  activeCarousel === 'right' ? 'z-30' : activeCarousel === 'center' ? 'z-5 pointer-events-none' : 'z-10'
+                className={`absolute right-8 top-1/2 -translate-y-1/2 ${
+                  activeCarousel === 'right' ? 'z-30' : 'z-10'
                 }`}
                 onMouseEnter={() => setActiveCarousel('right')}
+                initial={{ opacity: 0, x: 100 }}
                 animate={{
-                  x: activeCarousel === 'center' ? 200 : activeCarousel === 'right' ? -150 : 0,
-                  scale: activeCarousel === 'right' ? 1.05 : 0.85,
-                  opacity: activeCarousel === 'center' ? 0 : 1
+                  opacity: 1,
+                  x: activeCarousel === 'right' ? -40 : 0,
+                  scale: activeCarousel === 'right' ? 1.05 : 1,
+                  y: [0, 10, 0] // Animación flotante opuesta
                 }}
-                transition={{ type: 'spring', damping: 20 }}
+                transition={{ 
+                  x: { type: 'spring', damping: 20 },
+                  scale: { type: 'spring', damping: 15 },
+                  y: { 
+                    duration: 3,
+                    delay: 1.5, // Desfase para que no floten al mismo tiempo
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }
+                }}
               >
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 w-80">
+                <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-96 shadow-2xl">
                   <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
                     <span className="text-2xl">🍷</span>
                     Bebidas Recomendadas
@@ -624,10 +666,15 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                       return (
                         <motion.div
                           key={index}
-                          initial={{ opacity: 0, x: 20 }}
+                          initial={{ opacity: 0, x: 30 }}
                           animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          className="bg-white/80 rounded-lg p-2 cursor-pointer hover:bg-white/90 flex items-center gap-2"
+                          transition={{ delay: index * 0.08, type: 'spring', damping: 20 }}
+                          whileHover={{ 
+                            x: -10, 
+                            scale: 1.03,
+                            transition: { duration: 0.2 }
+                          }}
+                          className="bg-white/95 rounded-lg p-3 cursor-pointer hover:bg-white transition-colors flex items-center gap-3 shadow-md"
                           onClick={() => selectProductAndGetPairings(pairing, 'right')}
                         >
                           {pairing.image_url ? (
