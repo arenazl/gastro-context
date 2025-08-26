@@ -7,6 +7,7 @@ import {
   ArrowRightIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+import { API_ENDPOINTS } from '../config/api';
 
 interface Product {
   id: number;
@@ -387,7 +388,7 @@ export const InteractiveMenuAI: React.FC = () => {
 
     try {
       // Llamar al backend con Gemini
-      const response = await fetch('http://172.29.228.80:9002/api/chat/menu-ai', {
+      const response = await fetch(API_ENDPOINTS.chatMenuAI, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

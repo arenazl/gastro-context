@@ -52,3 +52,6 @@ structlog==23.2.0
 
 # Redis for caching (optional)
 redis==5.0.1
+
+# AI/ML
+google-generativeai==0.3.2
