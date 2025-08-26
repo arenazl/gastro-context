@@ -3836,6 +3836,62 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
 
     def interpret_user_intent_with_ai_persistent(self, user_message, thread_id, context=None):
         """Interpretar intención usando contexto persistente (como ChatGPT)"""
+        
+        # 🎯 DETECCIÓN RÁPIDA DE SALUDOS SIN IA (Fallback)
+        message_lower = user_message.lower().strip()
+        
+        # Patrones de saludos comunes
+        greeting_patterns = [
+            'hola', 'hi', 'hey', 'hello',
+            'buenos dias', 'buen dia', 'buenas tardes', 'buenas noches',
+            'que tal', 'como estas', 'como andas', 'como va',
+            'buenas', 'saludos', 'qué onda'
+        ]
+        
+        # Verificar si es un saludo
+        for pattern in greeting_patterns:
+            if pattern in message_lower or message_lower.startswith(pattern):
+                # Respuestas variadas para saludos
+                greeting_responses = [
+                    "¡Hola! 👋 ¿Cómo estás? ¿En qué te puedo ayudar?",
+                    "¡Hola! ¿Cómo andás? Espero que bien.",
+                    "¡Buen día! ¿En qué te puedo ayudar?",
+                    "¡Hola! ¿Qué tal? ¿Tenés ganas de algo en especial?",
+                    "¡Buenas! ¿Cómo va todo? ¿Qué se te antoja hoy?"
+                ]
+                import random
+                return {
+                    'intent_type': 'greeting',
+                    'target_product': None,
+                    'response_text': random.choice(greeting_responses),
+                    'confidence': 100,
+                    'recommended_products': []
+                }
+        
+        # Patrones de charla casual
+        casual_patterns = [
+            'gracias', 'muchas gracias', 'thanks',
+            'chau', 'adios', 'hasta luego', 'nos vemos',
+            'ok', 'okay', 'perfecto', 'genial', 'buenisimo'
+        ]
+        
+        for pattern in casual_patterns:
+            if pattern in message_lower:
+                casual_responses = [
+                    "¡De nada! Estoy acá para lo que necesites. 😊",
+                    "¡Por nada! Cualquier cosa avisame.",
+                    "¡Genial! ¿Necesitás algo más?",
+                    "¡Perfecto! Acá estoy si querés algo más."
+                ]
+                return {
+                    'intent_type': 'casual_conversation',
+                    'target_product': None,
+                    'response_text': random.choice(casual_responses),
+                    'confidence': 100,
+                    'recommended_products': []
+                }
+        
+        # Si no es saludo ni charla casual, continuar con IA
         try:
             import google.generativeai as genai
             
