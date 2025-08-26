@@ -292,22 +292,25 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         ))}
       </div>
 
-      {/* Carrito flotante - arriba a la derecha */}
+      {/* Carrito flotante - centrado a la derecha */}
       <motion.div
         ref={cartIconRef}
-        className="fixed top-4 right-4 z-50"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        className="fixed top-1/2 right-8 -translate-y-1/2 z-50"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
         onClick={() => setShowCartModal(true)}
+        initial={{ x: 100 }}
+        animate={{ x: 0 }}
+        transition={{ type: 'spring', damping: 20 }}
       >
         <div className="relative">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur-md rounded-full p-3 shadow-xl cursor-pointer">
-            <ShoppingCartIcon className="w-7 h-7 text-white" />
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur-md rounded-full p-4 shadow-2xl cursor-pointer">
+            <ShoppingCartIcon className="w-8 h-8 text-white" />
             {cartTotal > 0 && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold shadow-lg"
+                className="absolute -top-2 -right-2 bg-yellow-400 text-purple-900 rounded-full w-7 h-7 flex items-center justify-center text-base font-bold shadow-lg"
               >
                 {cartTotal}
               </motion.div>
@@ -532,12 +535,12 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                   }
                 }}
               >
-                <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-96 shadow-2xl">
+                <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-80 shadow-2xl">
                   <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
                     <span className="text-2xl">🥗</span>
                     Entradas y Acompañamientos
                   </h3>
-                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                     {currentView.pairings?.left.map((pairing: any, index: number) => {
                       console.log('Pairing izquierdo:', pairing);
                       return (
@@ -655,12 +658,12 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                   }
                 }}
               >
-                <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-96 shadow-2xl">
+                <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-80 shadow-2xl">
                   <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
                     <span className="text-2xl">🍷</span>
                     Bebidas Recomendadas
                   </h3>
-                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                     {currentView.pairings?.right.map((pairing: any, index: number) => {
                       console.log('Pairing derecho:', pairing);
                       return (
