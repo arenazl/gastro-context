@@ -1771,9 +1771,17 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 
                 elif user_intent['intent_type'] == 'product_recommendations':
                     # Usuario quiere recomendaciones generales - generar con IA
+                    print(f"\n🔍 DEBUG: Usuario pidió recomendaciones")
+                    print(f"🔍 DEBUG: Total productos disponibles: {len(products_data)}")
+                    print(f"🔍 DEBUG: Mensaje del usuario: '{user_message}'")
+                    
                     recommendation_response, recommendation_products = self.generate_intelligent_recommendations(
                         user_message, products_data, thread_id
                     )
+                    
+                    print(f"🔍 DEBUG: Categorías devueltas: {list(recommendation_products.keys())}")
+                    for cat, prods in recommendation_products.items():
+                        print(f"   📦 {cat}: {len(prods)} productos")
                     
                     send_response_with_thread({
                         'response': recommendation_response,
@@ -5380,6 +5388,12 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side
             
             # Obtener categorías disponibles para análisis inteligente
             categories = list(set([p['category_name'] for p in products_data if p['category_name']]))
+            
+            # 🔍 DEBUG: Ver qué hay en la base de datos
+            print(f"\n🔍 DEBUG CATEGORÍAS EN BD:")
+            print(f"   Total categorías: {len(categories)}")
+            print(f"   Categorías: {categories}")
+            print(f"   Total productos: {len(products_data)}")
             
             # Crear dataset compacto por categoría (solo primeros productos de cada categoría)
             category_products = {}

@@ -514,7 +514,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             >
               {/* Carrusel izquierdo de entradas/acompañamientos */}
               <motion.div
-                className={`absolute left-20 top-1/2 -translate-y-1/2 ${
+                className={`absolute left-20 top-[45%] -translate-y-1/2 ${
                   activeCarousel === 'left' ? 'z-30' : 'z-10'
                 }`}
                 onMouseEnter={() => setActiveCarousel('left')}
@@ -636,7 +636,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
               {/* Carrusel derecho de bebidas */}
               <motion.div
-                className={`absolute right-20 top-1/2 -translate-y-1/2 ${
+                className={`absolute right-20 top-[45%] -translate-y-1/2 ${
                   activeCarousel === 'right' ? 'z-30' : 'z-10'
                 }`}
                 onMouseEnter={() => setActiveCarousel('right')}
