@@ -292,15 +292,15 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         ))}
       </div>
 
-      {/* Carrito flotante - centrado a la derecha */}
+      {/* Carrito flotante - arriba a la derecha */}
       <motion.div
         ref={cartIconRef}
-        className="fixed top-1/2 right-8 -translate-y-1/2 z-50"
+        className="fixed top-6 right-8 z-50"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         onClick={() => setShowCartModal(true)}
-        initial={{ x: 100 }}
-        animate={{ x: 0 }}
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 20 }}
       >
         <div className="relative">
@@ -514,14 +514,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             >
               {/* Carrusel izquierdo de entradas/acompañamientos */}
               <motion.div
-                className={`absolute left-8 top-1/2 -translate-y-1/2 ${
+                className={`absolute left-20 top-1/2 -translate-y-1/2 ${
                   activeCarousel === 'left' ? 'z-30' : 'z-10'
                 }`}
                 onMouseEnter={() => setActiveCarousel('left')}
                 initial={{ opacity: 0, x: -100 }}
                 animate={{
                   opacity: 1,
-                  x: activeCarousel === 'left' ? 40 : 0,
+                  x: activeCarousel === 'left' ? 20 : 0,
                   scale: activeCarousel === 'left' ? 1.05 : 1,
                   y: [0, -10, 0] // Animación flotante
                 }}
@@ -540,7 +540,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                     <span className="text-2xl">🥗</span>
                     Entradas y Acompañamientos
                   </h3>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-2 max-h-[450px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                     {currentView.pairings?.left.map((pairing: any, index: number) => {
                       console.log('Pairing izquierdo:', pairing);
                       return (
@@ -636,14 +636,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
               {/* Carrusel derecho de bebidas */}
               <motion.div
-                className={`absolute right-8 top-1/2 -translate-y-1/2 ${
+                className={`absolute right-20 top-1/2 -translate-y-1/2 ${
                   activeCarousel === 'right' ? 'z-30' : 'z-10'
                 }`}
                 onMouseEnter={() => setActiveCarousel('right')}
                 initial={{ opacity: 0, x: 100 }}
                 animate={{
                   opacity: 1,
-                  x: activeCarousel === 'right' ? -40 : 0,
+                  x: activeCarousel === 'right' ? -20 : 0,
                   scale: activeCarousel === 'right' ? 1.05 : 1,
                   y: [0, 10, 0] // Animación flotante opuesta
                 }}
@@ -663,7 +663,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                     <span className="text-2xl">🍷</span>
                     Bebidas Recomendadas
                   </h3>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-2 max-h-[450px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                     {currentView.pairings?.right.map((pairing: any, index: number) => {
                       console.log('Pairing derecho:', pairing);
                       return (
