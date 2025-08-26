@@ -1,1 +1,1 @@
-web: bash start-heroku.sh
+web: bash scripts/startup/start-heroku.sh
