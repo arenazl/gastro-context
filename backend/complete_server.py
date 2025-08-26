@@ -1512,8 +1512,10 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests"""
         path = urlparse(self.path).path
+        print(f"DEBUG POST request to: {path}")
         
         if path == '/api/auth/login':
+            print("DEBUG: Processing login request")
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             
