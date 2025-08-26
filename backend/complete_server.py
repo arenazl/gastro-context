@@ -2351,18 +2351,11 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         
         result = execute_mysql_query_with_recovery(query, params if params else None)
         if result is not None:
-            # Transformar URLs de imágenes
+            # Las URLs ya están completas en la BD, no modificar
+            # Solo agregar una imagen por defecto si no hay URL
             for product in result:
-                if product.get('image_url'):
-                    # Si ya es una URL completa, dejarla tal cual
-                    if product['image_url'].startswith('http'):
-                        product['image_url'] = product['image_url']
-                    # Si es una ruta relativa de S3 (ej: gastro/products/pizza.jpg)
-                    elif product['image_url'].startswith('gastro/'):
-                        product['image_url'] = f"{S3_BASE_URL}/{product['image_url']}"
-                    # Si es solo el nombre del archivo
-                    else:
-                        product['image_url'] = f"{S3_BASE_URL}/{IMAGE_BASE_PATH}{product['image_url']}"
+                if not product.get('image_url'):
+                    product['image_url'] = f"{S3_BASE_URL}/{IMAGE_BASE_PATH}hamburguesa-clasica.jpg"
             return result
         
         # NO FALLBACK - Si no hay BD, error
@@ -2380,17 +2373,9 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         result = execute_mysql_query_with_recovery(query, (product_id,))
         if result is not None and len(result) > 0:
             product = result[0]
-            # Transformar URL de imagen
-            if product.get('image_url'):
-                # Si ya es una URL completa, dejarla tal cual
-                if product['image_url'].startswith('http'):
-                    product['image_url'] = product['image_url']
-                # Si es una ruta relativa de S3 (ej: gastro/products/pizza.jpg)
-                elif product['image_url'].startswith('gastro/'):
-                    product['image_url'] = f"{S3_BASE_URL}/{product['image_url']}"
-                # Si es solo el nombre del archivo
-                else:
-                    product['image_url'] = f"{S3_BASE_URL}/{IMAGE_BASE_PATH}{product['image_url']}"
+            # Las URLs ya están completas en la BD, no modificar
+            if not product.get('image_url'):
+                product['image_url'] = f"{S3_BASE_URL}/{IMAGE_BASE_PATH}hamburguesa-clasica.jpg"
             return product
         elif result is not None and len(result) == 0:
             return None
