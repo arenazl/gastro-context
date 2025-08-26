@@ -4540,8 +4540,8 @@ INTERPRETA DINÁMICAMENTE Y RESPONDE:"""
                 # Para otros casos, usar todos los productos de maridaje
                 relevant_products = all_pairing_products
             
-            # Limitar a máximo 15 productos (optimización de tokens)
-            limited_products = relevant_products[:15]
+            # Limitar a máximo 25 productos para más variedad de maridajes
+            limited_products = relevant_products[:25]
             
             # Crear prompt COMPACTO para Gemini (menos tokens)
             products_text = "\n".join([
@@ -4557,12 +4557,16 @@ INTERPRETA DINÁMICAMENTE Y RESPONDE:"""
 PRODUCTOS (ID|Nombre|Categoría|$):
 {products_text}
 
-Selecciona 3 mejores maridajes (usa palabras clave, no nombres exactos):
+Selecciona 8 mejores maridajes variados (usa palabras clave, no nombres exactos):
+- 4 entradas/acompañamientos (ensaladas, panes, aperitivos, guarniciones)
+- 4 bebidas (vinos, cervezas, jugos, aguas, cocteles)
+
+Ejemplos de matching:
 - PERAS con dulce → ID de cualquier producto con "peras"  
 - VINO tinto → ID de cualquier producto con "vino" y "tinto"
 - PAN → ID de cualquier producto con "pan"
 
-JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"wine/beverage/side/dessert"}}]}}"""
+JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side/wine/beverage/cocktail"}}]}}"""
             
             logger.info(f"[AI] Consultando Gemini para maridajes de {product_name} (tokens reducidos)")
             response = model.generate_content(prompt)

@@ -49,6 +49,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
   const [previousCenterProduct, setPreviousCenterProduct] = useState<Product | null>(null);
   const [pairingOrigin, setPairingOrigin] = useState<'left' | 'right' | null>(null);
   const [floatingMessage, setFloatingMessage] = useState<string | null>(null); // 🎬 MENSAJE FLOTANTE PARA SALUDOS
+  const [showCartModal, setShowCartModal] = useState(false); // Modal del carrito
 
   const inputRef = useRef<HTMLInputElement>(null);
   const cartIconRef = useRef<HTMLDivElement>(null);
@@ -93,6 +94,9 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       setPreviousCenterProduct(null);
       setPairingOrigin(null);
     }
+    
+    // Resetear carrusel activo al centro cuando se selecciona un nuevo producto
+    setActiveCarousel('center');
 
     // Mostrar el producto seleccionado
     setCurrentView({
@@ -118,21 +122,42 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       const data = await response.json();
       console.log('Maridajes recibidos:', data);
 
-      // Dividir maridajes en dos grupos (izquierda y derecha)
+      // Dividir maridajes en dos grupos: entradas/acompañamientos a la izquierda, bebidas a la derecha
       const allPairings = data.pairings || [];
-      const midPoint = Math.ceil(allPairings.length / 2);
+      
+      // Separar por tipo de producto
+      const appetizersAndSides = allPairings.filter((p: any) => 
+        p.type === 'appetizer' || p.type === 'side' || 
+        p.category_name?.toLowerCase().includes('entrada') ||
+        p.category_name?.toLowerCase().includes('ensalada') ||
+        p.category_name?.toLowerCase().includes('acompañamiento') ||
+        p.category_name?.toLowerCase().includes('guarnici')
+      );
+      
+      const beverages = allPairings.filter((p: any) => 
+        p.type === 'wine' || p.type === 'beverage' || p.type === 'cocktail' ||
+        p.category_name?.toLowerCase().includes('bebida') ||
+        p.category_name?.toLowerCase().includes('vino') ||
+        p.category_name?.toLowerCase().includes('cerveza') ||
+        p.category_name?.toLowerCase().includes('jugo') ||
+        p.category_name?.toLowerCase().includes('agua')
+      );
+      
+      // Si no hay separación clara, dividir por la mitad
+      const leftPairings = appetizersAndSides.length > 0 ? appetizersAndSides.slice(0, 4) : allPairings.slice(0, 4);
+      const rightPairings = beverages.length > 0 ? beverages.slice(0, 4) : allPairings.slice(4, 8);
 
       console.log('Maridajes procesados:', {
         total: allPairings.length,
-        left: allPairings.slice(0, midPoint),
-        right: allPairings.slice(midPoint)
+        entradas: leftPairings,
+        bebidas: rightPairings
       });
 
       setCurrentView(prev => ({
         ...prev,
         pairings: {
-          left: allPairings.slice(0, midPoint),
-          right: allPairings.slice(midPoint)
+          left: leftPairings,
+          right: rightPairings
         }
       }));
     } catch (error) {
@@ -276,6 +301,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         className="fixed top-8 right-8 z-50"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
+        onClick={() => setShowCartModal(true)}
       >
         <div className="relative">
           <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 shadow-2xl cursor-pointer">
@@ -486,20 +512,25 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               animate={{ opacity: 1 }}
               className="w-full h-full flex items-center justify-center relative"
             >
-              {/* Carrusel izquierdo de maridajes */}
+              {/* Carrusel izquierdo de entradas/acompañamientos */}
               <motion.div
-                className={`absolute left-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${activeCarousel === 'left' ? 'z-30 scale-110' : 'z-10 scale-90 opacity-70'
-                  }`}
+                className={`absolute left-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${
+                  activeCarousel === 'left' ? 'z-30' : activeCarousel === 'center' ? 'z-5 pointer-events-none' : 'z-10'
+                }`}
                 onMouseEnter={() => setActiveCarousel('left')}
                 animate={{
-                  x: activeCarousel === 'left' ? 200 : 0,
-                  scale: activeCarousel === 'left' ? 1.1 : 0.9
+                  x: activeCarousel === 'center' ? -200 : activeCarousel === 'left' ? 150 : 0,
+                  scale: activeCarousel === 'left' ? 1.05 : 0.85,
+                  opacity: activeCarousel === 'center' ? 0 : 1
                 }}
                 transition={{ type: 'spring', damping: 20 }}
               >
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 w-64">
-                  <h3 className="text-white font-bold mb-3">Maridajes</h3>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 w-80">
+                  <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
+                    <span className="text-2xl">🥗</span>
+                    Entradas y Acompañamientos
+                  </h3>
+                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                     {currentView.pairings?.left.map((pairing: any, index: number) => {
                       console.log('Pairing izquierdo:', pairing);
                       return (
@@ -569,20 +600,25 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 </div>
               </motion.div>
 
-              {/* Carrusel derecho de maridajes */}
+              {/* Carrusel derecho de bebidas */}
               <motion.div
-                className={`absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${activeCarousel === 'right' ? 'z-30 scale-110' : 'z-10 scale-90 opacity-70'
-                  }`}
+                className={`absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500 ${
+                  activeCarousel === 'right' ? 'z-30' : activeCarousel === 'center' ? 'z-5 pointer-events-none' : 'z-10'
+                }`}
                 onMouseEnter={() => setActiveCarousel('right')}
                 animate={{
-                  x: activeCarousel === 'right' ? -200 : 0,
-                  scale: activeCarousel === 'right' ? 1.1 : 0.9
+                  x: activeCarousel === 'center' ? 200 : activeCarousel === 'right' ? -150 : 0,
+                  scale: activeCarousel === 'right' ? 1.05 : 0.85,
+                  opacity: activeCarousel === 'center' ? 0 : 1
                 }}
                 transition={{ type: 'spring', damping: 20 }}
               >
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 w-64">
-                  <h3 className="text-white font-bold mb-3">Bebidas</h3>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 w-80">
+                  <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
+                    <span className="text-2xl">🍷</span>
+                    Bebidas Recomendadas
+                  </h3>
+                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                     {currentView.pairings?.right.map((pairing: any, index: number) => {
                       console.log('Pairing derecho:', pairing);
                       return (
@@ -712,6 +748,174 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               />
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal del Carrito */}
+      <AnimatePresence>
+        {showCartModal && (
+          <>
+            {/* Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCartModal(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+            
+            {/* Modal del Carrito */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-2xl max-h-[85vh] overflow-hidden"
+            >
+              <div className="bg-white rounded-3xl shadow-2xl p-8 h-full flex flex-col">
+                {/* Header del Modal */}
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-3">
+                    <ShoppingCartIcon className="w-8 h-8 text-purple-600" />
+                    <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                      Tu Carrito
+                    </h2>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setShowCartModal(false)}
+                    className="p-2 rounded-full bg-gray-100 hover:bg-gray-200"
+                  >
+                    <XMarkIcon className="w-6 h-6 text-gray-600" />
+                  </motion.button>
+                </div>
+                
+                {/* Contenido del Carrito */}
+                <div className="flex-1 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  {cart.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                      <ShoppingCartIcon className="w-24 h-24 mb-4 opacity-30" />
+                      <p className="text-xl">Tu carrito está vacío</p>
+                      <p className="text-sm mt-2">¡Agrega algunos productos deliciosos!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {cart.map((item) => (
+                        <motion.div
+                          key={item.id}
+                          layout
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 20 }}
+                          className="bg-gray-50 rounded-xl p-4 flex items-center gap-4"
+                        >
+                          {item.image_url ? (
+                            <img
+                              src={item.image_url}
+                              alt={item.name}
+                              className="w-20 h-20 object-cover rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-20 h-20 bg-gradient-to-br from-purple-400 to-pink-400 rounded-lg" />
+                          )}
+                          
+                          <div className="flex-1">
+                            <h3 className="font-bold text-lg">{item.name}</h3>
+                            <p className="text-sm text-gray-500">${item.price.toFixed(2)} c/u</p>
+                          </div>
+                          
+                          {/* Controles de cantidad */}
+                          <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-1">
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => {
+                                if (item.quantity > 1) {
+                                  setCart(prev => prev.map(i => 
+                                    i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i
+                                  ));
+                                } else {
+                                  setCart(prev => prev.filter(i => i.id !== item.id));
+                                }
+                              }}
+                              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
+                            >
+                              <span className="text-lg">−</span>
+                            </motion.button>
+                            
+                            <span className="font-bold text-lg w-12 text-center">{item.quantity}</span>
+                            
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => {
+                                setCart(prev => prev.map(i => 
+                                  i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+                                ));
+                              }}
+                              className="w-8 h-8 rounded-full bg-purple-100 hover:bg-purple-200 flex items-center justify-center"
+                            >
+                              <span className="text-lg text-purple-600">+</span>
+                            </motion.button>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className="font-bold text-lg text-purple-600">
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Footer con Total y Botones */}
+                {cart.length > 0 && (
+                  <div className="border-t pt-6 mt-6">
+                    <div className="flex justify-between items-center mb-6">
+                      <span className="text-2xl font-bold">Total:</span>
+                      <motion.span
+                        key={cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)}
+                        initial={{ scale: 1.2 }}
+                        animate={{ scale: 1 }}
+                        className="text-3xl font-bold text-purple-600"
+                      >
+                        ${cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                      </motion.span>
+                    </div>
+                    
+                    <div className="flex gap-4">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          setCart([]);
+                          setShowCartModal(false);
+                        }}
+                        className="flex-1 py-3 px-6 rounded-xl border-2 border-gray-300 font-semibold hover:bg-gray-50"
+                      >
+                        Vaciar Carrito
+                      </motion.button>
+                      
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 px-6 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold shadow-lg"
+                        onClick={() => {
+                          // Aquí iría la lógica para procesar el pedido
+                          alert('¡Procesando tu pedido!');
+                          setShowCartModal(false);
+                        }}
+                      >
+                        Procesar Pedido
+                      </motion.button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>
