@@ -1,0 +1,11 @@
+#!/bin/sh
+# Auto-incrementar versión antes de cada commit
+
+# Ejecutar script de bump version
+node scripts/bump-version.js patch
+
+# Agregar los archivos de versión actualizados al commit
+git add version.json
+git add frontend/public/version.json
+
+echo "✅ Versión actualizada automáticamente"

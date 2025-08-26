@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLocalization } from '../contexts/LocalizationContext';
+import { useVersion } from '../hooks/useVersion';
 import {
   UserCircleIcon,
   Cog6ToothIcon,
@@ -35,6 +36,7 @@ export const TopBar: React.FC<TopBarProps> = ({ restaurantName = 'Gastro Restaur
   const { user, logout } = useAuth();
   const { theme } = useTheme();
   const { settings, formatTime } = useLocalization();
+  const versionInfo = useVersion();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [notifications, setNotifications] = useState(3); // Ejemplo de notificaciones
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -121,7 +123,7 @@ export const TopBar: React.FC<TopBarProps> = ({ restaurantName = 'Gastro Restaur
                 {restaurantName}
               </span>
               <span className="text-[10px]" style={{ color: theme.colors.textMuted }}>
-                Sistema Gastronómico
+                Sistema Gastronómico <span className="opacity-50">v{versionInfo.version}</span>
               </span>
             </div>
             <span 

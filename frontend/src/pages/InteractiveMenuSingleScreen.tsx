@@ -227,7 +227,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
           } else if (data.categorizedProducts) {
             categorizedProds = data.categorizedProducts;
           }
-          
+
           setCurrentView({
             type: 'response',
             aiResponse: data.response,
@@ -294,8 +294,6 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       </motion.div>
 
       {/* Productos volando al carrito */}
-
-      //cheqyear array
 
       <AnimatePresence>
         {Array.isArray(flyingProducts) && flyingProducts.map(({ product, id, startPos }) => {
