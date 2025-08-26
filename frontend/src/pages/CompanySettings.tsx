@@ -152,7 +152,7 @@ export const CompanySettings: React.FC = () => {
   const [hasChanges, setHasChanges] = useState(false);
   const [originalSettings, setOriginalSettings] = useState<CompanySettingsData | null>(null);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:9002';
+  const API_URL = import.meta.env.VITE_API_URL === '' ? '' : (import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002');
 
   useEffect(() => {
     loadSettings();
