@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/PageHeader';

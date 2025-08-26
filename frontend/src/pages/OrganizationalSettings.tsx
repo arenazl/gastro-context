@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel, AnimatedCard, FloatingButton } from '../components/AnimatedComponents';
@@ -21,7 +23,6 @@ import {
   CogIcon
 } from '@heroicons/react/24/outline';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 interface Company {
   id?: number;

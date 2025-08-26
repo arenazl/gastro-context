@@ -1,5 +1,7 @@
 import React from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
+
 import { 
   CurrencyDollarIcon, 
   UserGroupIcon, 

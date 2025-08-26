@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useParams } from 'react-router-dom';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   SparklesIcon,
@@ -7,7 +9,6 @@ import {
   ArrowRightIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
-import { API_ENDPOINTS } from '../config/api';
 
 interface Product {
   id: number;
@@ -321,7 +322,7 @@ export const InteractiveMenuAI: React.FC = () => {
     try {
       // Inicializar caché del servidor (carga todos los datos en memoria)
       console.log('🔄 Inicializando caché del menú...');
-      const initResponse = await fetch('http://172.29.228.80:9002/api/menu/init');
+      const initResponse = await fetch('${API_BASE_URL}/api/menu/init');
       const initData = await initResponse.json();
       
       if (initData.status === 'success') {
@@ -329,7 +330,7 @@ export const InteractiveMenuAI: React.FC = () => {
       }
       
       // Cargar productos para el frontend
-      const response = await fetch('http://172.29.228.80:9002/api/products');
+      const response = await fetch('${API_BASE_URL}/api/products');
       const data = await response.json();
       setProducts(data);
       
@@ -581,7 +582,7 @@ export const InteractiveMenuAI: React.FC = () => {
     
     try {
       // Buscar maridajes e ingredientes
-      const response = await fetch('http://172.29.228.80:9002/api/chat/pairings', {
+      const response = await fetch('${API_BASE_URL}/api/chat/pairings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

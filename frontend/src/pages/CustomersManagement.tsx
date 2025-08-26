@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { PageHeader } from '../components/PageHeader';
 import { toast } from 'react-toastify';
 import { 
@@ -67,7 +69,6 @@ interface Props {
   initialSearchTerm?: string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 export const CustomersManagement: React.FC<Props> = ({ 
   isModal = false, 

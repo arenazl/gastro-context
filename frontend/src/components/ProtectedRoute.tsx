@@ -1,5 +1,7 @@
 import React from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { Navigate } from 'react-router-dom';
+
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {

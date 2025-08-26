@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { 
   ShoppingCartIcon,
   SparklesIcon,
@@ -81,7 +83,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
 
     // Obtener maridajes de la IA
     try {
-      const response = await fetch(`http://172.29.228.80:9002/api/chat/pairings`, {
+      const response = await fetch(`${API_BASE_URL}/api/chat/pairings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -164,7 +166,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
     // Después de 2 segundos, cambiar a respuesta
     setTimeout(async () => {
       try {
-        const response = await fetch(`http://172.29.228.80:9002/api/chat/menu-ai`, {
+        const response = await fetch(API_ENDPOINTS.chatMenuAI, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

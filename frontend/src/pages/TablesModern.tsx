@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel, AnimatedCard, FloatingButton, GradientText } from '../components/AnimatedComponents';
@@ -45,7 +47,7 @@ export const TablesModern: React.FC = () => {
   const loadTables = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/tables`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || API_BASE_URL}/api/tables`);
       const data = await response.json();
       setTables(data);
     } catch (error) {
@@ -89,7 +91,7 @@ export const TablesModern: React.FC = () => {
   const handleStatusChange = async (table: Table, newStatus: string) => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/tables/${table.id}/status`,
+        `${import.meta.env.VITE_API_URL || API_BASE_URL}/api/tables/${table.id}/status`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -108,7 +110,7 @@ export const TablesModern: React.FC = () => {
   const handleSaveTable = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/tables`,
+        `${import.meta.env.VITE_API_URL || API_BASE_URL}/api/tables`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

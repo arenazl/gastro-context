@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import {
   Plus,
   PlusCircle,
@@ -27,7 +28,6 @@ import { PageHeader } from '../components/PageHeader';
 import { motion, AnimatePresence } from 'framer-motion';
 import { styles, getListItemClasses, combineClasses } from '../styles/SharedStyles';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 interface Category {
   id?: number;

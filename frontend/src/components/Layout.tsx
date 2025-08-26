@@ -1,5 +1,7 @@
 import React, { Fragment } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+
 import { Disclosure, Menu, Transition } from '@headlessui/react';
 import { Bars3Icon, XMarkIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';

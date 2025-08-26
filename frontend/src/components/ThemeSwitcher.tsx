@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { SwatchIcon, XMarkIcon } from '@heroicons/react/24/outline';
 

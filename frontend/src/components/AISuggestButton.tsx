@@ -1,5 +1,7 @@
 import React from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion } from 'framer-motion';
+
 import { Wand2, Sparkles } from 'lucide-react';
 
 interface AISuggestButtonProps {

@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import {
   X,
   Plus,
@@ -38,7 +40,6 @@ interface TableLayoutDesignerProps {
   readOnly?: boolean;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 export const TableLayoutDesigner: React.FC<TableLayoutDesignerProps> = ({
   tables: initialTables,

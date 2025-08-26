@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
@@ -67,7 +69,6 @@ const statusConfig = {
   delivered: { name: 'Entregado', color: '#6B7280', icon: TruckIcon }
 };
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 export const KitchenModern: React.FC = () => {
   const { theme } = useTheme();

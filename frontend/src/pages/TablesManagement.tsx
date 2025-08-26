@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useTranslation } from "react-i18next";
+
 import {
   Plus,
   Edit2,
@@ -26,7 +28,7 @@ import { toast } from "react-toastify";
 import { PageHeader } from "../components/PageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://172.29.228.80:9002";
+const API_URL = import.meta.env.VITE_API_URL || "${API_BASE_URL}";
 
 interface Area {
   id: number;

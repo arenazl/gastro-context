@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useParams } from 'react-router-dom';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   SparklesIcon, 
@@ -68,7 +70,7 @@ export const CustomerMenu: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch('http://172.29.228.80:9002/api/products');
+      const response = await fetch('${API_BASE_URL}/api/products');
       const data = await response.json();
       setProducts(data);
       
@@ -126,7 +128,7 @@ export const CustomerMenu: React.FC = () => {
 
     try {
       // Llamar al endpoint de Gemini
-      const response = await fetch('http://172.29.228.80:9002/api/chat/gemini', {
+      const response = await fetch('${API_BASE_URL}/api/chat/gemini', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

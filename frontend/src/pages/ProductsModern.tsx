@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel, AnimatedCard, FloatingButton, GradientText } from '../components/AnimatedComponents';
@@ -86,10 +88,10 @@ export const ProductsModern: React.FC = () => {
       setLoading(true);
 
       const [productsRes, categoriesRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products`, {
+        fetch(`${import.meta.env.VITE_API_URL || API_BASE_URL}/api/products`, {
           signal: newController.signal
         }),
-        fetch(`${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/categories`, {
+        fetch(`${import.meta.env.VITE_API_URL || API_BASE_URL}/api/categories`, {
           signal: newController.signal
         })
       ]);
@@ -120,8 +122,8 @@ export const ProductsModern: React.FC = () => {
   const handleSaveProduct = async () => {
     try {
       const url = editingProduct
-        ? `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products/${editingProduct.id}`
-        : `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products`;
+        ? `${import.meta.env.VITE_API_URL || API_BASE_URL}/api/products/${editingProduct.id}`
+        : `${import.meta.env.VITE_API_URL || API_BASE_URL}/api/products`;
 
       const method = editingProduct ? 'PUT' : 'POST';
 
@@ -151,7 +153,7 @@ export const ProductsModern: React.FC = () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'}/api/products/${id}`,
+        `${import.meta.env.VITE_API_URL || API_BASE_URL}/api/products/${id}`,
         { method: 'DELETE' }
       );
 

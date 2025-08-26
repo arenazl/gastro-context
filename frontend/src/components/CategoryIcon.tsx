@@ -1,5 +1,7 @@
 import React from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+
 import { 
   faUtensils, 
   faBowlFood, 

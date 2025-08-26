@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useNavigate } from 'react-router-dom'
 
 // Types for Google Authentication
@@ -68,7 +69,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
   const [isGoogleLoaded, setIsGoogleLoaded] = useState(false)
   const navigate = useNavigate()
   
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'
+  const API_BASE_URL = import.meta.env.VITE_API_URL || API_BASE_URL
   
   // Load Google Identity Services script
   useEffect(() => {
@@ -301,7 +302,7 @@ export const useGoogleAuth = () => {
     
     try {
       // Call logout endpoint
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002'
+      const API_BASE_URL = import.meta.env.VITE_API_URL || API_BASE_URL
       await fetch(`${API_BASE_URL}/auth/google/logout`, {
         method: 'POST',
         headers: {

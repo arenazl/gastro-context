@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import {
   PlusCircle, 
   Edit2, 
   Trash2, 
@@ -27,7 +28,6 @@ import * as fas from '@fortawesome/free-solid-svg-icons';
 import { PageHeader } from '../components/PageHeader';
 import { FloatingButton } from '../components/AnimatedComponents';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 // Helper para renderizar iconos de FontAwesome o emojis
 const renderCategoryIcon = (icon: string | undefined) => {

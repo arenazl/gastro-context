@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
@@ -73,7 +75,6 @@ interface Subcategory {
 const productsCache: Map<number | 'all', Product[]> = new Map();
 const subcategoriesCache: Map<number | 'all', Subcategory[]> = new Map();
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 export const NewOrderWithCache: React.FC = () => {
   const navigate = useNavigate();

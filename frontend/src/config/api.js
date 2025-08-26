@@ -14,6 +14,9 @@ export const WS_BASE_URL = import.meta.env.VITE_WS_URL ||
     ? 'wss://gastro-ec0530e03436.herokuapp.com'
     : 'ws://172.29.228.80:9002');
 
+// Export para compatibilidad con imports antiguos
+export const API_URL = API_BASE_URL;
+
 // URLs específicas
 export const API_ENDPOINTS = {
   // Autenticación

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { useTranslation } from 'react-i18next';
+
 import { useNavigate } from 'react-router-dom';
 import { tablesAPI } from '../services/api';
 

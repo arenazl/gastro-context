@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/PageHeader';
 import {
@@ -179,7 +181,7 @@ export const KitchenKanban: React.FC = () => {
   // Función para cargar órdenes desde el servidor
   const loadFreshData = useCallback(async () => {
     try {
-      const response = await fetch('http://172.29.228.80:9002/api/orders/kitchen');
+      const response = await fetch('${API_BASE_URL}/api/orders/kitchen');
       if (!response.ok) throw new Error('Error al cargar órdenes');
       
       const data = await response.json();
@@ -341,7 +343,7 @@ export const KitchenKanban: React.FC = () => {
                            newStatus === 'ready' ? 'ready' : 'viewed';
       
       // Actualizar estado en el servidor (actualizar todos los items de la orden)
-      const response = await fetch(`http://172.29.228.80:9002/api/kitchen/${orderId}/status`, {
+      const response = await fetch(`${API_BASE_URL}/api/kitchen/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

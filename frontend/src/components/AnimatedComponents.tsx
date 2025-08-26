@@ -1,5 +1,7 @@
 import React, { type CSSProperties } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion } from 'framer-motion';
+
 import { useTheme } from '../contexts/ThemeContext';
 
 interface GlassPanelProps {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 
 export const UnifiedSettingsSimple: React.FC = () => {
   return (

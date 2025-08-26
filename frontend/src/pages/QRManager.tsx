@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { QRCodeSVG } from 'qrcode.react';
+
 import { motion } from 'framer-motion';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel } from '../components/AnimatedComponents';
@@ -30,7 +32,7 @@ export const QRManager: React.FC = () => {
 
   const fetchTables = async () => {
     try {
-      const response = await fetch('http://172.29.228.80:9002/api/tables');
+      const response = await fetch('${API_BASE_URL}/api/tables');
       const data = await response.json();
       setTables(data);
     } catch (error) {

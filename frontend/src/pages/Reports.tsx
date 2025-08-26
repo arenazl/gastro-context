@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
@@ -12,7 +13,6 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { toast } from 'react-toastify';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002';
 
 // Colores para gráficos
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1', '#14B8A6'];
