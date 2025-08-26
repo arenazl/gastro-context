@@ -214,10 +214,24 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
           setCurrentView({ type: 'idle' });
         } else {
           // Respuesta normal
+          // Convertir array a objeto si es necesario
+          let categorizedProds = {};
+          if (Array.isArray(data.categorizedProducts)) {
+            // Si es un array, agruparlo por categoría
+            categorizedProds = data.categorizedProducts.reduce((acc, product) => {
+              const category = product.category || 'General';
+              if (!acc[category]) acc[category] = [];
+              acc[category].push(product);
+              return acc;
+            }, {});
+          } else if (data.categorizedProducts) {
+            categorizedProds = data.categorizedProducts;
+          }
+          
           setCurrentView({
             type: 'response',
             aiResponse: data.response,
-            categorizedProducts: data.categorizedProducts || {},
+            categorizedProducts: categorizedProds,
             products: data.recommendedProducts || []
           });
         }

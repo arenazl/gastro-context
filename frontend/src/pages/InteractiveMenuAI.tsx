@@ -494,13 +494,28 @@ export const InteractiveMenuAI: React.FC = () => {
 
       // Si hay productos recomendados, mostrarlos (pero NO si es conversación casual)
       // Manejar productos categorizados (carruseles) o productos simples
-      if (!isCasualConversation && data.categorizedProducts && Object.keys(data.categorizedProducts).length > 0) {
+      
+      // Convertir array a objeto si es necesario
+      let categorizedProds = {};
+      if (Array.isArray(data.categorizedProducts)) {
+        // Si es un array, agruparlo por categoría
+        categorizedProds = data.categorizedProducts.reduce((acc, product) => {
+          const category = product.category || 'General';
+          if (!acc[category]) acc[category] = [];
+          acc[category].push(product);
+          return acc;
+        }, {});
+      } else if (data.categorizedProducts) {
+        categorizedProds = data.categorizedProducts;
+      }
+      
+      if (!isCasualConversation && categorizedProds && Object.keys(categorizedProds).length > 0) {
         setTimeout(() => {
           const categorizedStep: ConversationStep = {
             id: (Date.now() + 2).toString(),
             type: 'categorized_products',
             content: '',
-            categorizedProducts: data.categorizedProducts,
+            categorizedProducts: categorizedProds,
             visible: true
           };
           setConversationSteps(prev => [...prev, categorizedStep]);

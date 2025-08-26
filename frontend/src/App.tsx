@@ -7,7 +7,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import { CollapsibleLayout as Layout } from './components/CollapsibleLayout';
 import { LoginModern as Login } from './pages/LoginModern';
 import { DashboardModern as Dashboard } from './pages/DashboardModern';
-import { TablesModern as Tables } from './pages/TablesModern';
 import { TablesVisual } from './pages/TablesVisual';
 import { NewOrderWithCache } from './pages/NewOrderWithCache';
 import { KitchenKanban as Kitchen } from './pages/KitchenKanban';
