@@ -28,7 +28,7 @@ import { toast } from "react-toastify";
 import { PageHeader } from "../components/PageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 
-const API_URL = import.meta.env.VITE_API_URL || "${API_BASE_URL}";
+const API_URL = import.meta.env.VITE_API_URL || API_BASE_URL;
 
 interface Area {
   id: number;
