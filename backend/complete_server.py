@@ -35,14 +35,21 @@ PORT = int(os.environ.get('PORT', 9002))
 
 # Configurar Gemini AI - DEBE estar en variable de entorno
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
+GEMINI_AVAILABLE = False
+genai = None  # Variable global para el módulo
+
 # Solo configurar si hay API key disponible
 if GEMINI_API_KEY:
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
+        GEMINI_AVAILABLE = True
         print(f"✅ Gemini AI configurado correctamente")
     except Exception as e:
         print(f"⚠️ No se pudo configurar Gemini AI: {e}")
+        GEMINI_AVAILABLE = False
+else:
+    print(f"⚠️ GEMINI_API_KEY no configurada - Usando fallback inteligente sin IA")
 
 # Configuración de S3 para imágenes
 S3_BASE_URL = os.environ.get('S3_BASE_URL', 'https://sisbarrios.s3.sa-east-1.amazonaws.com')
@@ -4656,6 +4663,17 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side
             print(f"Producto: {product_name}")
             print(f"Categoría: {category}")
             print(f"Error: {str(e)}")
+            
+            # Detectar tipo de error específico
+            if "name 'genai' is not defined" in str(e):
+                print(f"❌ Gemini AI no está configurado - Falta API KEY o módulo")
+            elif "quota" in str(e).lower() or "limit" in str(e).lower():
+                print(f"❌ Límite de API excedido - Verificar quota de Gemini")
+            elif "api" in str(e).lower() and "key" in str(e).lower():
+                print(f"❌ API Key inválida o expirada")
+            else:
+                print(f"❌ Error desconocido en Gemini")
+                
             print(f"⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️\n")
             
             # Devolver productos reales aleatorios para que la app siga funcionando
