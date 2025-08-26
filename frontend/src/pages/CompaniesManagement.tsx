@@ -85,7 +85,8 @@ export const CompaniesManagement: React.FC = () => {
     is_active: true
   });
 
-  const API_URL = import.meta.env.VITE_API_URL === '' ? '' : (import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002');
+  // Importar configuración centralizada (NO MÁS HARDCODEO!)
+  const API_URL = import('../config/api.config').then(m => m.API_URL);
 
   useEffect(() => {
     loadCompanies();

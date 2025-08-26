@@ -32,7 +32,7 @@ export const LoginModern: React.FC = () => {
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL === '' ? '' : (import.meta.env.VITE_API_URL || 'http://172.29.228.80:9002');
+      const { API_URL } = await import('../config/api.config');
       const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
