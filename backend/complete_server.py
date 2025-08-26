@@ -4516,8 +4516,33 @@ INTERPRETA DINÁMICAMENTE Y RESPONDE:"""
             restaurant_data = get_restaurant_data()
             all_pairing_products = restaurant_data.get('pairing_products', [])
             
+            # Si no hay productos en caché, obtenerlos directamente de la BD
             if not all_pairing_products:
-                return self.get_fallback_pairings(product_name, category)
+                query = """
+                SELECT p.id, p.name, p.description, p.price, p.image_url, 
+                       c.name as category_name
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.available = 1
+                """
+                products_from_db = execute_mysql_query_with_recovery(query)
+                
+                if products_from_db:
+                    all_pairing_products = []
+                    for p in products_from_db:
+                        all_pairing_products.append({
+                            'id': p['id'],
+                            'name': p['name'],
+                            'description': p.get('description', ''),
+                            'category': p.get('category_name', ''),
+                            'price': float(p.get('price', 0)),
+                            'image_url': p.get('image_url', '')
+                        })
+                
+                # Si aún no hay productos, lanzar error claro
+                if not all_pairing_products:
+                    logger.error("[MARIDAJES] ERROR CRÍTICO: No hay productos en la base de datos")
+                    raise Exception("No hay productos disponibles en la base de datos para generar maridajes")
             
             # 🎯 FILTRADO INTELIGENTE: Solo productos relevantes para el maridaje
             category_lower = category.lower() if category else ''
@@ -4609,17 +4634,119 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side
                 return formatted_pairings
             
         except Exception as e:
-            logger.error(f"Error generando maridajes con IA: {e}")
-        
-        # Fallback si falla la IA
-        return self.get_fallback_pairings(product_name, category)
+            # Log detallado del error de Gemini para debug
+            logger.error(f"[GEMINI_ERROR] Falla en IA al generar maridajes: {str(e)}")
+            logger.error(f"[GEMINI_ERROR] Producto: {product_name}, Categoría: {category}")
+            
+            # IMPORTANTE: En desarrollo queremos ver estos errores
+            print(f"\n⚠️ ⚠️ ⚠️  ERROR DE GEMINI AI ⚠️ ⚠️ ⚠️")
+            print(f"Producto: {product_name}")
+            print(f"Categoría: {category}")
+            print(f"Error: {str(e)}")
+            print(f"⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️\n")
+            
+            # Devolver productos reales aleatorios para que la app siga funcionando
+            try:
+                query = """
+                SELECT p.id, p.name, p.description, p.price, p.image_url, 
+                       c.name as category_name, p.category_id
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.available = 1
+                ORDER BY RAND()
+                LIMIT 8
+                """
+                
+                products = execute_mysql_query_with_recovery(query)
+                if products:
+                    formatted_pairings = []
+                    for p in products:
+                        category_name = p.get('category_name', '')
+                        pairing_type = 'side'
+                        if any(word in category_name.lower() for word in ['bebida', 'vino', 'cerveza']):
+                            pairing_type = 'beverage'
+                        elif any(word in category_name.lower() for word in ['entrada', 'ensalada']):
+                            pairing_type = 'appetizer'
+                        
+                        formatted_pairings.append({
+                            'id': p['id'],
+                            'name': p['name'],
+                            'description': p['description'] or '[SIN IA] Producto aleatorio',
+                            'price': float(p['price']),
+                            'image_url': p.get('image_url', ''),
+                            'type': pairing_type,
+                            'category': category_name,
+                            'category_name': category_name,
+                            'ai_failed': True  # Marcador para saber que falló la IA
+                        })
+                    
+                    logger.warning(f"[FALLBACK] Devolviendo {len(formatted_pairings)} productos aleatorios (Gemini falló)")
+                    return formatted_pairings
+                    
+            except Exception as fallback_error:
+                logger.error(f"[CRÍTICO] Error obteniendo productos de BD: {fallback_error}")
+                raise Exception(f"Falla total: No hay IA ni productos en BD. Error: {fallback_error}")
+                
+        # Este punto no debería alcanzarse nunca
+        raise Exception("Error inesperado en generate_ai_pairings")
     
     def get_fallback_pairings(self, product_name, category):
-        """Maridajes de respaldo cuando falla la IA"""
+        """Maridajes de respaldo cuando falla la IA - obtiene productos reales de la BD"""
+        try:
+            # Obtener productos reales de la base de datos
+            query = """
+            SELECT p.id, p.name, p.description, p.price, p.image_url, 
+                   c.name as category_name, p.category_id
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.available = 1
+            ORDER BY RAND()
+            LIMIT 8
+            """
+            
+            products = execute_mysql_query_with_recovery(query)
+            
+            if products:
+                formatted_pairings = []
+                for p in products:
+                    category_name = p.get('category_name', '')
+                    # Determinar el tipo basado en la categoría
+                    pairing_type = 'side'
+                    if any(word in category_name.lower() for word in ['bebida', 'vino', 'cerveza', 'jugo', 'agua']):
+                        pairing_type = 'beverage' if 'bebida' in category_name.lower() else 'wine'
+                    elif any(word in category_name.lower() for word in ['entrada', 'ensalada', 'aperitivo']):
+                        pairing_type = 'appetizer'
+                    elif any(word in category_name.lower() for word in ['postre', 'dulce']):
+                        pairing_type = 'dessert'
+                    
+                    formatted_pairings.append({
+                        'id': p['id'],
+                        'name': p['name'],
+                        'description': p['description'] or 'Delicioso acompañamiento',
+                        'price': float(p['price']),
+                        'image_url': p.get('image_url', ''),
+                        'type': pairing_type,
+                        'category': category_name,
+                        'category_name': category_name,
+                        'category_id': p.get('category_id')
+                    })
+                
+                return formatted_pairings[:8]  # Devolver 8 productos
+                
+        except Exception as e:
+            logger.error(f"Error obteniendo fallback pairings: {e}")
+        
+        # Si todo falla, devolver un fallback mínimo pero con estructura completa
         return [
-            {'name': 'Agua mineral', 'description': 'Refrescante y versátil', 'type': 'beverage'},
-            {'name': 'Vino de la casa', 'description': 'Selección del sommelier', 'type': 'wine'},
-            {'name': 'Pan artesanal', 'description': 'Acompañamiento perfecto', 'type': 'side'}
+            {'id': 1, 'name': 'Agua mineral', 'description': 'Refrescante y versátil', 
+             'type': 'beverage', 'price': 3.50, 'image_url': '', 
+             'category': 'Bebidas', 'category_name': 'Bebidas'},
+            {'id': 2, 'name': 'Vino de la casa', 'description': 'Selección del sommelier', 
+             'type': 'wine', 'price': 15.00, 'image_url': '', 
+             'category': 'Vinos', 'category_name': 'Vinos'},
+            {'id': 3, 'name': 'Pan artesanal', 'description': 'Acompañamiento perfecto', 
+             'type': 'side', 'price': 4.50, 'image_url': '', 
+             'category': 'Entradas', 'category_name': 'Entradas'}
         ]
 
     def get_customer_by_id(self, customer_id):
