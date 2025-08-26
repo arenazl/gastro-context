@@ -3982,8 +3982,11 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=GEMINI_API_KEY)
-                self._genai_configured = True
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    raise Exception("No hay API key de Gemini configurada")
             
             # Obtener thread con contexto persistente
             thread = conversation_threads.get(thread_id)
@@ -4148,8 +4151,11 @@ RESPONDE SOLO JSON:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=GEMINI_API_KEY)
-                self._genai_configured = True
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    raise Exception("No hay API key de Gemini configurada")
             
             # Buscar productos que podrían coincidir con el mensaje
             potential_products = []
@@ -4267,8 +4273,11 @@ RESPONDE SOLO JSON:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=GEMINI_API_KEY)
-                self._genai_configured = True
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    raise Exception("No hay API key de Gemini configurada")
             
             # Preparar lista de ingredientes reales
             ingredients_list = [f"- {ing['name']} ({ing['quantity']} {ing.get('unit', '')})" 
@@ -4313,8 +4322,11 @@ RESPONDE:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=GEMINI_API_KEY)
-                self._genai_configured = True
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    raise Exception("No hay API key de Gemini configurada")
             
             # Obtener TODAS las categorías disponibles dinámicamente
             all_categories = list(set([p['category_name'] for p in all_products if p['category_name']]))
@@ -4406,8 +4418,11 @@ INTERPRETA DINÁMICAMENTE Y RESPONDE:"""
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=GEMINI_API_KEY)
-                self._genai_configured = True
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    raise Exception("No hay API key de Gemini configurada")
             
             # Obtener TODAS las categorías disponibles dinámicamente
             all_categories = list(set([p['category_name'] for p in all_products if p['category_name']]))
@@ -5433,8 +5448,11 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side
             
             # Configurar Gemini si no está configurado
             if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=GEMINI_API_KEY)
-                self._genai_configured = True
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    raise Exception("No hay API key de Gemini configurada")
             
             # Obtener categorías disponibles para análisis inteligente
             categories = list(set([p['category_name'] for p in products_data if p['category_name']]))
