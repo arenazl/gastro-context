@@ -458,8 +458,8 @@ build/
 dist/
 out/
 
-# Static generation
-static/
+# Static generation (comentado para permitir backend/static)
+# static/
 
 # ==================================
 # Misceláneos Específicos del Negocio
