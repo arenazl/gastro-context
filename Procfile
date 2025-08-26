@@ -1,1 +1,1 @@
-web: node server.js
+web: cd backend && python complete_server.py
