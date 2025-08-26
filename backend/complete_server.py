@@ -36,7 +36,12 @@ if GEMINI_API_KEY:
     except Exception as e:
         print(f"⚠️ No se pudo configurar Gemini AI: {e}")
 
-# Directorio para imágenes estáticas
+# Configuración de S3 para imágenes
+S3_BASE_URL = os.environ.get('S3_BASE_URL', 'https://sisbarrios.s3.sa-east-1.amazonaws.com')
+IMAGE_BASE_PATH = os.environ.get('IMAGE_BASE_PATH', 'gastro/products/')
+IMAGE_STORAGE_TYPE = os.environ.get('IMAGE_STORAGE_TYPE', 's3')
+
+# Directorio para imágenes estáticas (fallback)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 PRODUCTS_IMG_DIR = os.path.join(STATIC_DIR, 'products')
 
@@ -2349,10 +2354,15 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             # Transformar URLs de imágenes
             for product in result:
                 if product.get('image_url'):
-                    # Si es una URL de Pexels, ya está convertida a nombre de archivo
-                    if not product['image_url'].startswith('http'):
-                        # Es un nombre de archivo local
-                        product['image_url'] = f"http://172.29.228.80:9002/static/products/{product['image_url']}"
+                    # Si ya es una URL completa, dejarla tal cual
+                    if product['image_url'].startswith('http'):
+                        product['image_url'] = product['image_url']
+                    # Si es una ruta relativa de S3 (ej: gastro/products/pizza.jpg)
+                    elif product['image_url'].startswith('gastro/'):
+                        product['image_url'] = f"{S3_BASE_URL}/{product['image_url']}"
+                    # Si es solo el nombre del archivo
+                    else:
+                        product['image_url'] = f"{S3_BASE_URL}/{IMAGE_BASE_PATH}{product['image_url']}"
             return result
         
         # NO FALLBACK - Si no hay BD, error
@@ -2372,8 +2382,15 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             product = result[0]
             # Transformar URL de imagen
             if product.get('image_url'):
-                if not product['image_url'].startswith('http'):
-                    product['image_url'] = f"http://172.29.228.80:9001/static/products/{product['image_url']}"
+                # Si ya es una URL completa, dejarla tal cual
+                if product['image_url'].startswith('http'):
+                    product['image_url'] = product['image_url']
+                # Si es una ruta relativa de S3 (ej: gastro/products/pizza.jpg)
+                elif product['image_url'].startswith('gastro/'):
+                    product['image_url'] = f"{S3_BASE_URL}/{product['image_url']}"
+                # Si es solo el nombre del archivo
+                else:
+                    product['image_url'] = f"{S3_BASE_URL}/{IMAGE_BASE_PATH}{product['image_url']}"
             return product
         elif result is not None and len(result) == 0:
             return None
