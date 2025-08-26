@@ -43,13 +43,40 @@ if GEMINI_API_KEY:
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        GEMINI_AVAILABLE = True
-        print(f"✅ Gemini AI configurado correctamente")
-    except Exception as e:
-        print(f"⚠️ No se pudo configurar Gemini AI: {e}")
+        
+        # 🔍 VERIFICAR QUE LA API KEY FUNCIONA
+        print(f"🔍 Verificando API Key de Gemini...")
+        print(f"   API Key: {GEMINI_API_KEY[:10]}...{GEMINI_API_KEY[-4:]}")  # Mostrar solo inicio y fin
+        
+        # Hacer una prueba simple con la API
+        try:
+            test_model = genai.GenerativeModel('gemini-1.5-flash')
+            test_response = test_model.generate_content("Di 'OK' si funciona")
+            if test_response and test_response.text:
+                GEMINI_AVAILABLE = True
+                print(f"✅ Gemini AI configurado y funcionando correctamente")
+                print(f"   Respuesta de prueba: {test_response.text[:50]}")
+            else:
+                print(f"⚠️ API Key válida pero respuesta vacía")
+                GEMINI_AVAILABLE = False
+        except Exception as test_error:
+            print(f"❌ API Key inválida o con problemas:")
+            print(f"   Error: {str(test_error)[:100]}")
+            if "quota" in str(test_error).lower():
+                print(f"   💰 Problema: Límite de quota excedido")
+            elif "api" in str(test_error).lower() and "key" in str(test_error).lower():
+                print(f"   🔑 Problema: API Key inválida o expirada")
+            else:
+                print(f"   ❓ Problema: Error desconocido")
+            GEMINI_AVAILABLE = False
+            
+    except ImportError as e:
+        print(f"❌ No se pudo importar google.generativeai: {e}")
+        print(f"   Instalar con: pip install google-generativeai")
         GEMINI_AVAILABLE = False
 else:
-    print(f"⚠️ GEMINI_API_KEY no configurada - Usando fallback inteligente sin IA")
+    print(f"⚠️ GEMINI_API_KEY no configurada")
+    print(f"   La IA no estará disponible para maridajes y recomendaciones")
 
 # Configuración de S3 para imágenes
 S3_BASE_URL = os.environ.get('S3_BASE_URL', 'https://sisbarrios.s3.sa-east-1.amazonaws.com')
