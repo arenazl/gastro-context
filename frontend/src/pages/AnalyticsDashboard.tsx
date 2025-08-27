@@ -812,7 +812,7 @@ export const AnalyticsDashboard: React.FC = () => {
         subtitle={t('pages.analytics.subtitle')}
       />
 
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto">
         {/* Barra de Control Superior */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">

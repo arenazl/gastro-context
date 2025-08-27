@@ -96,7 +96,7 @@ export const BusinessSettings: React.FC = () => {
         ]}
       />
 
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Logo y nombre */}
         <GlassPanel className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: theme.colors.text }}>

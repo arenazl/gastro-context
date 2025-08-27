@@ -299,7 +299,7 @@ export const UnifiedSettings: React.FC = () => {
         subtitle="Gestiona empresas, usuarios, clientes, áreas y configuraciones en tarjetas organizadas"
       />
 
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto">
         <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4 gap-6">
           
           {/* TARJETA 1: EMPRESAS + USUARIOS + ROLES */}

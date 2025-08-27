@@ -328,3 +328,84 @@ Todos los endpoints funcionando con MySQL real:
 3. `/frontend/src/pages/NewOrderWithCache.tsx` - Arreglos de scroll y layout
 4. `/frontend/src/i18n/locales/es.json` - Traducciones
 5. `/backend/add_missing_columns.sql` - Script de migración
+
+### 🔄 Sesión del 27/08/2025 - Mejoras UX del Menú Interactivo con IA y Curación de Imágenes
+
+#### 1. **Módulo de Menú con IA Corregido** ✅
+**Problema identificado**: El menú interactivo no mostraba carruseles de productos a pesar de que los datos llegaban al frontend
+
+**Solución implementada**:
+- Backend ahora maneja el intent_type 'general_inquiry' correctamente
+- Creada función `find_relevant_products_with_ai` para búsquedas dinámicas
+- Sistema completamente dinámico sin categorías hardcodeadas
+
+#### 2. **Mejoras de UX en InteractiveMenuSingleScreen** ✅
+**Problemas corregidos**:
+1. **Carrito reposicionado**: 
+   - Antes: Modal fijo en la parte inferior
+   - Ahora: Dropdown elegante en top-right debajo del ícono del carrito
+   
+2. **Animación de producto al carrito**:
+   - Implementada animación donde el producto:
+     - Se encoge ligeramente (scale: 0.8)
+     - Sube 100px primero
+     - Luego vuela hacia el carrito
+     - Duración total: 0.8s con easing suave
+   
+3. **Preservación del contexto**:
+   - Antes: Al agregar producto, volvía a estado 'idle'
+   - Ahora: Mantiene el carrusel y pairings laterales activos
+   - Implementado estado `previousView` para restaurar contexto
+
+4. **Diseño responsivo**:
+   - Agregadas clases Tailwind para split-screen
+   - Componentes se adaptan a diferentes tamaños de pantalla
+
+#### 3. **Archivos movidos a Legacy** ✅
+- `/frontend/src/pages/legacy/CustomerMenu.tsx`
+- `/frontend/src/pages/legacy/InteractiveMenuAI.tsx`
+- Actualizadas imports en App.tsx
+
+### ⚠️ ESTADO ACTUAL DEL MENÚ INTERACTIVO
+
+#### Funcionalidades completadas:
+- ✅ Chat con IA integrado con Gemini
+- ✅ Carruseles dinámicos de productos
+- ✅ Sistema de pairings (maridajes) laterales
+- ✅ Animaciones fluidas de productos
+- ✅ Carrito dropdown interactivo
+- ✅ Preservación de contexto al agregar productos
+- ✅ Diseño responsivo mobile-first
+
+#### 4. **Detección de Intents Mejorada** ✅
+**Problema**: El sistema no detectaba correctamente queries sobre ingredientes
+**Solución**: 
+- Implementado modelo de datos genérico sin términos hardcodeados
+- Explicación del modelo jerárquico: Categorías → Subcategorías → Productos → Ingredientes
+- Sistema ahora entiende dinámicamente cualquier pregunta sobre el menú
+
+#### 5. **Fondos Visuales en Categorías del Acordeón** ✅
+**Mejora visual implementada**:
+- Cada categoría del acordeón ahora muestra una imagen blur de un producto aleatorio
+- Implementado con backdrop-filter para efecto de blur de 2px
+- Mejora significativa en el atractivo visual del menú
+
+#### 6. **Curación Automática de Imágenes de Productos** ✅
+**Problema**: Todos los productos tenían imágenes genéricas de DiceBear
+**Solución implementada**:
+- Creado script `cure_product_images.py` para automatizar la actualización
+- Traduce nombres de productos del español al inglés para mejores búsquedas
+- Integración con Unsplash API para obtener imágenes reales de comida
+- Procesamiento en batches de 100 productos para respetar límites de API
+
+**Resultados**:
+- ✅ 274 productos actualizados con imágenes reales de Unsplash
+- ✅ Sistema de fallback a source.unsplash.com para productos sin API key
+- ✅ Procesamiento completo de los 504 productos del menú
+- ✅ Pausas automáticas para respetar límites de API (50 req/hora)
+
+#### Pendientes de mejora:
+- [ ] Animación más suave lateral→centro (transición de productos)
+- [ ] Indicadores visuales de carga mientras IA procesa
+- [ ] Historial de conversación persistente
+- [ ] Integración con sistema de pedidos real

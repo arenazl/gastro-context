@@ -299,7 +299,7 @@ export const TablesManagement: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto">
         {/* Toolbar */}
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto">
           <div className="bg-white rounded-lg shadow-sm p-4">
             <div className="flex flex-col md:flex-row gap-4">
               {/* Search */}

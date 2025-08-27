@@ -34,26 +34,16 @@ export const LoginModern: React.FC = () => {
     setLoading(true);
 
     try {
-      const { API_URL } = await import('../config/api.config');
-      const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess(true);
-        setTimeout(() => {
-          login(data.access_token, data.user);
-          navigate('/dashboard');
-        }, 1000);
-      } else {
-        setError(data.detail || 'Invalid credentials');
-      }
-    } catch (error) {
-      setError('Connection error. Please try again.');
+      // Usar el método login del contexto directamente
+      await login(email, password);
+      setSuccess(true);
+      
+      // Navegar inmediatamente después del login exitoso
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 500);
+    } catch (error: any) {
+      setError(error.response?.data?.detail || 'Credenciales inválidas. Por favor intente nuevamente.');
     } finally {
       setLoading(false);
     }

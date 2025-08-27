@@ -208,9 +208,9 @@ const settingSections: SettingSection[] = [
     subtitle: 'Empleados, roles, permisos, turnos y asistencia',
     icon: Users,
     color: '#6366F1',
-    path: '/settings/unified',
+    path: '/employees-management',
     category: 'administration',
-    badge: 'ABM Completo',
+    badge: 'Nuevo',
     hasForm: true,
     status: 'active',
     isGrouped: true,
@@ -330,6 +330,7 @@ export const SettingsHub: React.FC = () => {
       '/products': '/products',
       '/tables-visual': '/tables-visual',
       '/kitchen-kanban': '/kitchen-kanban',
+      '/employees-management': '/employees-management',
       '/settings/unified': '/unified-settings',
       '/settings/business-complete': '/business-settings',
       '/settings/regional': '/localization-settings',
@@ -372,7 +373,7 @@ export const SettingsHub: React.FC = () => {
       />
 
       {/* Search and Filter Bar */}
-      <div className="px-6 py-4 bg-white border-b border-gray-200 shadow-sm">
+      <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto flex gap-4">
           {/* Search */}
           <div className="flex-1 max-w-md">
@@ -433,7 +434,7 @@ export const SettingsHub: React.FC = () => {
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto">
           {searchTerm && (
             <div className="mb-6 flex items-center justify-between">
               <p className="text-sm text-gray-600">
@@ -621,7 +622,7 @@ export const SettingsHub: React.FC = () => {
       </div>
 
       {/* Footer Stats */}
-      <div className="bg-white border-t border-gray-200 px-6 py-4">
+      <div className="bg-white border-t border-gray-200">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">

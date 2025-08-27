@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import {
   Plus,
@@ -35,8 +35,13 @@ import {
 import { toast } from 'react-toastify';
 import { PageHeader } from '../components/PageHeader';
 import { SlideDrawer } from '../components/SlideDrawer';
+import { ImageWithSkeleton } from '../components/ImageWithSkeleton';
+import { IngredientsExpander } from '../components/IngredientsExpander';
 import { motion, AnimatePresence } from 'framer-motion';
 import { styles, getListItemClasses, combineClasses } from '../styles/SharedStyles';
+import dataFetchService from '../services/dataFetchService';
+import { imageCacheService } from '../services/imageCache.service';
+import { checkBrowserCapabilities, getAvailableStorageOptions } from '../utils/browserCapabilities';
 
 
 interface Category {
@@ -103,16 +108,24 @@ const getCategoryIcon = (name: string) => {
   return categoryIcons.default;
 };
 
+// Cache de productos por categoría
+const productsCache = new Map<number | 'all', Product[]>();
+const subcategoriesCache = new Map<number | 'all', Subcategory[]>();
+
 export const ProductsDynamic: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingFromCache, setLoadingFromCache] = useState(false);
+  const [preloadingBackground, setPreloadingBackground] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<number | 'all' | null>('all'); // Por defecto "todos"
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estados para el modal de productos con pestañas
+  const [activeProductTab, setActiveProductTab] = useState<'general' | 'ingredients'>('general');
   
   // Estados para la barra superior
   const [orderType, setOrderType] = useState<'dine-in' | 'takeout' | 'delivery'>('dine-in');
@@ -127,7 +140,7 @@ export const ProductsDynamic: React.FC = () => {
   const [editingType, setEditingType] = useState<'category' | 'subcategory' | 'product' | null>(null);
 
   useEffect(() => {
-    loadData();
+    loadInitialData();
   }, []);
   
   // Búsqueda de direcciones con Nominatim (OpenStreetMap)
@@ -239,75 +252,224 @@ export const ProductsDynamic: React.FC = () => {
     }
   }, [searchTerm, searchResults, showSearchResults]);
 
-  const loadData = async () => {
-    // Verificar si hay datos en caché
-    const cachedData = localStorage.getItem('products_cache');
-    if (cachedData) {
-      const { categories: cachedCat, subcategories: cachedSub, products: cachedProd, timestamp } = JSON.parse(cachedData);
-      const cacheAge = Date.now() - timestamp;
-
-      // Si el caché tiene menos de 5 minutos, usarlo
-      if (cacheAge < 5 * 60 * 1000) {
-        setLoadingFromCache(true);
-        setCategories(cachedCat || []);
-        setSubcategories(cachedSub || []);
-        setProducts(cachedProd || []);
-
-        // Seleccionar primera categoría por defecto
-        if (cachedCat && cachedCat.length > 0 && !selectedCategory) {
-          setSelectedCategory(cachedCat[0].id);
-        }
-
-        toast.info('📦 Cargando desde caché local', {
-          position: 'bottom-right',
-          autoClose: 2000
-        });
-
-        setTimeout(() => setLoadingFromCache(false), 500);
-        return;
-      }
-    }
-
+  // Carga inicial optimizada con priorización de imágenes
+  const loadInitialData = async () => {
     setLoading(true);
+    
     try {
-      const [catRes, subRes, prodRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/categories`),
-        fetch(`${API_BASE_URL}/api/subcategories`),
-        fetch(`${API_BASE_URL}/api/products`)
-      ]);
-
-      const [catData, subData, prodData] = await Promise.all([
-        catRes.json(),
-        subRes.json(),
-        prodRes.json()
+      // REQUEST ÚNICO: Cargar TODO de una vez para tener metadata completa
+      const [catData, allSubData, allProdData] = await Promise.all([
+        dataFetchService.fetch<Category[]>(`${API_BASE_URL}/api/categories`, {
+          showNotification: false,
+          cacheDuration: 10 * 60 * 1000
+        }),
+        dataFetchService.fetch<Subcategory[]>(`${API_BASE_URL}/api/subcategories`, {
+          showNotification: false,
+          cacheDuration: 10 * 60 * 1000
+        }),
+        dataFetchService.fetch<Product[]>(`${API_BASE_URL}/api/products`, {
+          showNotification: false,
+          cacheDuration: 10 * 60 * 1000
+        })
       ]);
 
       setCategories(catData || []);
-      setSubcategories(subData || []);
-      setProducts(prodData || []);
-
-      // Guardar en caché
-      localStorage.setItem('products_cache', JSON.stringify({
-        categories: catData,
-        subcategories: subData,
-        products: prodData,
-        timestamp: Date.now()
-      }));
-
-      // Seleccionar primera categoría por defecto
-      if (catData && catData.length > 0 && !selectedCategory) {
-        setSelectedCategory(catData[0].id);
+      
+      if (catData && catData.length > 0 && allSubData && allProdData) {
+        const firstCategoryId = catData[0].id;
+        setSelectedCategory(firstCategoryId);
+        
+        // Organizar datos por categoría en cache
+        catData.forEach(category => {
+          const categoryId = category.id!;
+          const categorySubs = allSubData.filter(sub => sub.category_id === categoryId);
+          const categoryProds = allProdData.filter(prod => prod.category_id === categoryId);
+          
+          // Guardar en cache local
+          subcategoriesCache.set(categoryId, categorySubs);
+          productsCache.set(categoryId, categoryProds);
+        });
+        
+        // Mostrar datos de la primera categoría inmediatamente
+        const firstCategorySubcategories = subcategoriesCache.get(firstCategoryId) || [];
+        const firstCategoryProducts = productsCache.get(firstCategoryId) || [];
+        
+        setSubcategories(firstCategorySubcategories);
+        setProducts(firstCategoryProducts);
+        
+        console.log(`✅ Cargados: ${catData.length} categorías, ${allSubData.length} subcategorías, ${allProdData.length} productos`);
+        
+        // 🎯 PRIORIDAD: Cargar imágenes de la primera categoría inmediatamente
+        setTimeout(() => startPriorityImageCaching(firstCategoryProducts, allProdData), 100);
       }
     } catch (error) {
-      console.error('Error loading data:', error);
-      toast.error('Error cargando datos');
+      console.error('Error loading initial data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = async () => {
+  // 🎯 Sistema de carga priorizada de imágenes
+  const startPriorityImageCaching = async (priorityProducts: Product[], allProducts: Product[]) => {
+    const startTime = performance.now();
+    console.log('🚀 === INICIANDO CARGA PRIORITARIA DE IMÁGENES ===');
+    console.log(`📅 Timestamp: ${new Date().toLocaleTimeString()}`);
+    
+    try {
+      // 🔍 VERIFICAR CAPACIDADES DEL BROWSER
+      const capabilities = checkBrowserCapabilities();
+      if (!capabilities.caches || typeof caches === 'undefined') {
+        console.log('⚠️ Cache API no disponible, usando solo lazy loading con proxy');
+        console.log(`✅ Proxy está activo - las imágenes se cargarán bajo demanda`);
+        return;
+      }
+      
+      // 🎯 FASE 1: CARGAR IMÁGENES PRIORITARIAS (primera categoría visible)
+      console.log(`🎯 FASE 1: Cargando imágenes prioritarias (${priorityProducts.length} productos)`);
+      const priorityUrls = priorityProducts
+        .filter(p => p.image_url)
+        .map(p => p.image_url!)
+        .slice(0, 12); // Limitar a los primeros 12 productos visibles
+      
+      if (priorityUrls.length > 0) {
+        await imageCacheService.precacheImages(priorityUrls);
+        console.log(`✅ Fase 1 completada: ${priorityUrls.length} imágenes prioritarias cacheadas`);
+      }
+      
+      // 🔄 FASE 2: BACKGROUND - Cargar el resto de imágenes en batches pequeños
+      const remainingProducts = allProducts.filter(p => 
+        p.image_url && !priorityProducts.some(pp => pp.id === p.id)
+      );
+      
+      if (remainingProducts.length > 0) {
+        console.log(`🔄 FASE 2: Iniciando carga background (${remainingProducts.length} productos restantes)`);
+        setPreloadingBackground(true);
+        
+        // Usar setTimeout para no bloquear la UI
+        setTimeout(() => startBackgroundImageCaching(remainingProducts), 2000);
+      }
+      
+      const phase1Duration = Math.round(performance.now() - startTime);
+      console.log(`🎉 Fase 1 completada en ${phase1Duration}ms`);
+      
+    } catch (error) {
+      console.error('❌ Error en carga prioritaria:', error);
+    }
+  };
+
+  // 🔄 Sistema de carga en background (no bloquea la UI)
+  const startBackgroundImageCaching = async (products: Product[]) => {
+    console.log('🔄 === INICIANDO CARGA BACKGROUND ===');
+    
+    try {
+      const batchSize = 5; // Batches muy pequeños para no impactar UX
+      const pauseBetweenBatches = 1000; // 1 segundo entre batches
+      
+      for (let i = 0; i < products.length; i += batchSize) {
+        const batch = products.slice(i, i + batchSize);
+        const batchUrls = batch
+          .filter(p => p.image_url)
+          .map(p => p.image_url!);
+        
+        if (batchUrls.length > 0) {
+          console.log(`🔄 Background batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(products.length/batchSize)}: ${batchUrls.length} imágenes`);
+          await imageCacheService.precacheImages(batchUrls);
+        }
+        
+        // Pausa entre batches para no saturar
+        await new Promise(resolve => setTimeout(resolve, pauseBetweenBatches));
+      }
+      
+      console.log('🎉 === CARGA BACKGROUND COMPLETADA ===');
+      setPreloadingBackground(false);
+      
+    } catch (error) {
+      console.error('❌ Error en carga background:', error);
+      setPreloadingBackground(false);
+    }
+  };
+
+
+  // Función para cambiar de categoría con carga inteligente de imágenes
+  const handleCategoryChange = (categoryId: number) => {
+    setSelectedCategory(categoryId);
+    
+    // Los datos ya están en cache desde el request inicial
+    const categoryProducts = productsCache.get(categoryId) || [];
+    const categorySubcategories = subcategoriesCache.get(categoryId) || [];
+    
+    setProducts(categoryProducts);
+    setSubcategories(categorySubcategories);
+    
+    // 🎯 Cargar imágenes de la nueva categoría si no están cacheadas
+    if (categoryProducts.length > 0) {
+      console.log(`🔄 Categoría cambiada a: ${categories.find(c => c.id === categoryId)?.name}`);
+      console.log(`📋 Verificando cache de imágenes para ${categoryProducts.length} productos`);
+      
+      // Cargar imágenes de esta categoría con prioridad media (después de 500ms)
+      setTimeout(() => {
+        startCategoryImageCaching(categoryProducts);
+      }, 500);
+    }
+  };
+
+  // 🎯 Carga de imágenes específica para una categoría
+  const startCategoryImageCaching = async (categoryProducts: Product[]) => {
+    try {
+      const categoryUrls = categoryProducts
+        .filter(p => p.image_url)
+        .map(p => p.image_url!)
+        .slice(0, 15); // Limitar a los primeros 15 productos de la categoría
+      
+      if (categoryUrls.length === 0) return;
+      
+      // Verificar cuántas imágenes ya están cacheadas
+      let alreadyCached = 0;
+      for (const url of categoryUrls) {
+        const isCached = await imageCacheService.isImageCached(url);
+        if (isCached) alreadyCached++;
+      }
+      
+      const needToCacheCount = categoryUrls.length - alreadyCached;
+      
+      if (needToCacheCount > 0) {
+        console.log(`🎯 Cacheando ${needToCacheCount} imágenes nuevas de categoría (${alreadyCached} ya en cache)`);
+        
+        // Filtrar solo las URLs que no están cacheadas
+        const urlsToCache = [];
+        for (const url of categoryUrls) {
+          const isCached = await imageCacheService.isImageCached(url);
+          if (!isCached) {
+            urlsToCache.push(url);
+          }
+        }
+        
+        // Cachear las imágenes faltantes
+        if (urlsToCache.length > 0) {
+          await imageCacheService.precacheImages(urlsToCache);
+          console.log(`✅ ${urlsToCache.length} imágenes de categoría cacheadas exitosamente`);
+        }
+      } else {
+        console.log(`✅ Todas las imágenes de la categoría ya están en cache`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error cacheando imágenes de categoría:', error);
+    }
+  };
+
+  // Mantener loadData para compatibilidad
+  const loadData = loadInitialData;
+
+  const handleSave = useCallback(async () => {
     if (!editingItem || !editingType) return;
+
+    console.log('handleSave called with:', { 
+      editingItem, 
+      editingType, 
+      selectedCategory, 
+      selectedSubcategory 
+    });
 
     try {
       let endpoint = '';
@@ -319,6 +481,7 @@ export const ProductsDynamic: React.FC = () => {
         method = editingItem.id ? 'PUT' : 'POST';
         body = {
           name: editingItem.name,
+          description: editingItem.description || '',
           icon: editingItem.icon || 'utensils',
           color: editingItem.color || '#3B82F6',
           is_active: true
@@ -328,7 +491,9 @@ export const ProductsDynamic: React.FC = () => {
         method = editingItem.id ? 'PUT' : 'POST';
         body = {
           name: editingItem.name,
+          description: editingItem.description || '',
           category_id: selectedCategory,
+          icon: editingItem.icon || 'layers',
           is_active: true
         };
       } else if (editingType === 'product') {
@@ -344,6 +509,12 @@ export const ProductsDynamic: React.FC = () => {
         };
       }
 
+      console.log('Sending request:', {
+        url: `${API_BASE_URL}${endpoint}`,
+        method,
+        body
+      });
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -351,20 +522,23 @@ export const ProductsDynamic: React.FC = () => {
       });
 
       if (response.ok) {
-        toast.success('Guardado exitosamente');
+        const result = await response.json();
+        console.log('Guardado exitosamente:', result);
         // Invalidar caché
         localStorage.removeItem('products_cache');
         await loadData();
         setEditingItem(null);
         setEditingType(null);
       } else {
-        toast.error('Error al guardar');
+        const errorData = await response.text();
+        console.error('Error al guardar:', response.status, errorData);
+        alert(`Error al guardar: ${errorData || response.statusText}`);
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Error al guardar');
+      alert(`Error al guardar: ${error.message}`);
     }
-  };
+  }, [editingItem, editingType, loadData]);
 
   const handleDelete = async (id: number, type: 'category' | 'subcategory' | 'product') => {
     if (!confirm('¿Estás seguro de eliminar?')) return;
@@ -379,16 +553,13 @@ export const ProductsDynamic: React.FC = () => {
       });
 
       if (response.ok) {
-        toast.success('Eliminado exitosamente');
         // Invalidar caché
         localStorage.removeItem('products_cache');
         await loadData();
       } else {
-        toast.error('Error al eliminar');
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Error al eliminar');
     }
   };
 
@@ -445,7 +616,7 @@ export const ProductsDynamic: React.FC = () => {
   };
 
   // Slide Drawer para edición con breadcrumb dinámico
-  const EditDrawer = () => {
+  const EditDrawer = useCallback(() => {
     if (!editingItem || !editingType) return null;
 
     // Construir breadcrumb según el contexto
@@ -543,28 +714,156 @@ export const ProductsDynamic: React.FC = () => {
           </div>
         }
       >
-        <div className="space-y-8">
-          {/* Información Básica */}
-          <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Package className="h-5 w-5 text-gray-600" />
-              <h4 className="text-lg font-semibold text-gray-800">Información Básica</h4>
+        <div className="space-y-6">
+          {/* Header del Producto (solo para productos) */}
+          {editingType === 'product' && (
+            <div className="bg-white rounded-xl p-4 border border-gray-200">
+              <div className="flex items-center gap-3">
+                <Package className="h-6 w-6 text-blue-600" />
+                <h3 className="text-xl font-semibold text-gray-800">
+                  {editingItem?.name || 'Nuevo Producto'}
+                </h3>
+              </div>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Tag className="inline h-3 w-3 mr-1 text-gray-500" />
-                Nombre {editingType === 'product' && '*'}
-              </label>
-              <input
-                type="text"
-                value={editingItem.name || ''}
-                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder={`Nombre del ${editingType === 'category' ? 'categoría' : editingType === 'subcategory' ? 'subcategoría' : 'producto'}`}
-                autoFocus
-              />
+          )}
+          
+          {/* Pestañas para productos */}
+          {editingType === 'product' && (
+            <div className="border-b border-gray-200">
+              <nav className="flex space-x-8" aria-label="Tabs">
+                <button
+                  onClick={() => setActiveProductTab('general')}
+                  className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                    activeProductTab === 'general'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Package className="inline h-4 w-4 mr-2" />
+                  Información General
+                </button>
+                <button
+                  onClick={() => setActiveProductTab('ingredients')}
+                  className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                    activeProductTab === 'ingredients'
+                      ? 'border-purple-500 text-purple-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <ChefHat className="inline h-4 w-4 mr-2" />
+                  Ingredientes
+                </button>
+              </nav>
             </div>
+          )}
+          
+          {/* Contenido de pestaña Información General */}
+          {(editingType !== 'product' || activeProductTab === 'general') && (
+            <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+              {editingType !== 'product' && (
+                <div className="flex items-center gap-2 mb-4">
+                  <Package className="h-5 w-5 text-gray-600" />
+                  <h4 className="text-lg font-semibold text-gray-800">Información Básica</h4>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Tag className="inline h-3 w-3 mr-1 text-gray-500" />
+                  Nombre {editingType === 'product' && '*'}
+                </label>
+                <input
+                  type="text"
+                  value={editingItem?.name || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setEditingItem(prev => ({ ...prev, name: newValue }));
+                  }}
+                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder={`Nombre del ${editingType === 'category' ? 'categoría' : editingType === 'subcategory' ? 'subcategoría' : 'producto'}`}
+                  autoFocus
+                />
+              </div>
+
+            {editingType === 'category' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <FileText className="inline h-3 w-3 mr-1 text-gray-500" />
+                  Descripción
+                </label>
+                <textarea
+                  value={editingItem?.description || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setEditingItem(prev => ({ ...prev, description: newValue }));
+                  }}
+                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                  placeholder="Descripción de la categoría"
+                  rows={2}
+                />
+              </div>
+            )}
+
+            {editingType === 'subcategory' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FileText className="inline h-3 w-3 mr-1 text-gray-500" />
+                    Descripción
+                  </label>
+                  <textarea
+                    value={editingItem?.description || ''}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setEditingItem(prev => ({ ...prev, description: newValue }));
+                    }}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    placeholder="Descripción de la subcategoría"
+                    rows={2}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Layers className="inline h-3 w-3 mr-1 text-gray-500" />
+                    Icono
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editingItem?.icon || 'layers'}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setEditingItem(prev => ({ ...prev, icon: newValue }));
+                      }}
+                      className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="Nombre del icono de FontAwesome"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        // Aquí puedes llamar a una API o usar lógica para sugerir un icono
+                        const suggestedIcon = editingItem.name ? 
+                          editingItem.name.toLowerCase().includes('bebida') ? 'glass' :
+                          editingItem.name.toLowerCase().includes('postre') ? 'ice-cream' :
+                          editingItem.name.toLowerCase().includes('entrada') ? 'utensils' :
+                          editingItem.name.toLowerCase().includes('carne') ? 'drumstick-bite' :
+                          editingItem.name.toLowerCase().includes('vegeta') ? 'carrot' :
+                          editingItem.name.toLowerCase().includes('pasta') ? 'pizza-slice' :
+                          'layers' : 'layers';
+                        setEditingItem({ ...editingItem, icon: suggestedIcon });
+                      }}
+                      className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-medium flex items-center gap-2"
+                    >
+                      <ChefHat className="h-4 w-4" />
+                      Sugerir con IA
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Usa nombres de iconos de Font Awesome o Lucide React
+                  </p>
+                </div>
+              </>
+            )}
 
             {editingType === 'product' && (
               <>
@@ -578,8 +877,11 @@ export const ProductsDynamic: React.FC = () => {
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
                       <input
                         type="number"
-                        value={editingItem.price || ''}
-                        onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
+                        value={editingItem?.price || ''}
+                        onChange={(e) => {
+                          const newValue = parseFloat(e.target.value);
+                          setEditingItem(prev => ({ ...prev, price: newValue }));
+                        }}
                         className="w-full pl-8 pr-3 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="0.00"
                         step="0.01"
@@ -593,8 +895,11 @@ export const ProductsDynamic: React.FC = () => {
                       Disponibilidad
                     </label>
                     <select
-                      value={editingItem.available !== false ? 'true' : 'false'}
-                      onChange={(e) => setEditingItem({ ...editingItem, available: e.target.value === 'true' })}
+                      value={editingItem?.available !== false ? 'true' : 'false'}
+                      onChange={(e) => {
+                        const newValue = e.target.value === 'true';
+                        setEditingItem(prev => ({ ...prev, available: newValue }));
+                      }}
                       className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
                       <option value="true">Disponible</option>
@@ -609,8 +914,11 @@ export const ProductsDynamic: React.FC = () => {
                     Descripción
                   </label>
                   <textarea
-                    value={editingItem.description || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                    value={editingItem?.description || ''}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setEditingItem(prev => ({ ...prev, description: newValue }));
+                    }}
                     className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                     placeholder="Descripción detallada del producto"
                     rows={3}
@@ -618,7 +926,8 @@ export const ProductsDynamic: React.FC = () => {
                 </div>
               </>
             )}
-          </div>
+            </div>
+          )}
 
           {/* Personalización Visual */}
           {(editingType === 'category' || editingType === 'product') && (
@@ -640,11 +949,51 @@ export const ProductsDynamic: React.FC = () => {
               </div>
 
               {editingType === 'category' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Color de la categoría
-                  </label>
-                  <div className="flex flex-wrap gap-3">
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <Package className="inline h-3 w-3 mr-1 text-gray-500" />
+                      Icono de la categoría
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editingItem?.icon || 'utensils'}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          setEditingItem(prev => ({ ...prev, icon: newValue }));
+                        }}
+                        className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="Nombre del icono (ej: coffee, pizza, wine)"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const suggestedIcon = editingItem.name ? 
+                            editingItem.name.toLowerCase().includes('bebida') ? 'wine' :
+                            editingItem.name.toLowerCase().includes('café') ? 'coffee' :
+                            editingItem.name.toLowerCase().includes('postre') ? 'cake' :
+                            editingItem.name.toLowerCase().includes('entrada') ? 'utensils' :
+                            editingItem.name.toLowerCase().includes('plato') ? 'beef' :
+                            editingItem.name.toLowerCase().includes('pizza') ? 'pizza' :
+                            editingItem.name.toLowerCase().includes('pasta') ? 'pizza' :
+                            editingItem.name.toLowerCase().includes('ensalada') ? 'apple' :
+                            'utensils' : 'utensils';
+                          setEditingItem({ ...editingItem, icon: suggestedIcon });
+                        }}
+                        className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all font-medium flex items-center gap-2"
+                      >
+                        <ChefHat className="h-4 w-4" />
+                        Sugerir con IA
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Color de la categoría
+                    </label>
+                    <div className="flex flex-wrap gap-3">
                     {['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'].map(color => (
                       <button
                         key={color}
@@ -657,6 +1006,7 @@ export const ProductsDynamic: React.FC = () => {
                     ))}
                   </div>
                 </div>
+                </>
               )}
 
               {editingType === 'product' && (
@@ -667,8 +1017,11 @@ export const ProductsDynamic: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    value={editingItem.image_url || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, image_url: e.target.value })}
+                    value={editingItem?.image_url || ''}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setEditingItem(prev => ({ ...prev, image_url: newValue }));
+                    }}
                     className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     placeholder="https://ejemplo.com/imagen.jpg"
                   />
@@ -676,13 +1029,12 @@ export const ProductsDynamic: React.FC = () => {
                     <div className="mt-4">
                       <p className="text-sm font-medium text-gray-700 mb-2">Vista previa</p>
                       <div className="relative w-full h-48 bg-gray-100 rounded-xl overflow-hidden">
-                        <img
+                        <ImageWithSkeleton
                           src={editingItem.image_url}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://via.placeholder.com/300x200?text=Error+al+cargar';
-                          }}
+                          alt="Vista previa del producto"
+                          fallbackSrc="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"
+                          className="w-full h-full rounded-xl"
+                          skeletonClassName="rounded-xl"
                         />
                       </div>
                     </div>
@@ -692,13 +1044,30 @@ export const ProductsDynamic: React.FC = () => {
             </div>
           )}
 
+          {/* Pestaña de ingredientes */}
+          {editingType === 'product' && activeProductTab === 'ingredients' && (
+            <div className="bg-gray-50 rounded-xl p-6">
+              <IngredientsExpander
+                productId={editingItem?.id || 0}
+                productName={editingItem?.name || ''}
+                productCategory={categories.find(c => c.id === editingItem?.category_id)?.name}
+                isOpen={true}
+                onToggle={() => {}} // Siempre abierto en el modal
+                hideHeader={true} // Ocultar header ya que el modal tiene el suyo
+              />
+            </div>
+          )}
+
           {/* Estado activo */}
           <div className="flex items-center">
             <input
               type="checkbox"
               id="is_active"
-              checked={editingItem.is_active !== false}
-              onChange={(e) => setEditingItem({ ...editingItem, is_active: e.target.checked })}
+              checked={editingItem?.is_active !== false}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                setEditingItem(prev => ({ ...prev, is_active: newValue }));
+              }}
               className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
@@ -710,7 +1079,7 @@ export const ProductsDynamic: React.FC = () => {
         </div>
       </SlideDrawer>
     );
-  };
+  }, [editingItem, editingType, categories, subcategories, selectedCategory, addressSearch, addressSuggestions, handleSave]);
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
@@ -741,12 +1110,22 @@ export const ProductsDynamic: React.FC = () => {
               )}
             </div>
             
-            {/* Indicador de resultados */}
-            {showSearchResults && (
-              <span className="text-sm text-gray-600 whitespace-nowrap">
-                <span className="font-semibold text-blue-600">{searchResults.total}</span> resultados
-              </span>
-            )}
+            {/* Indicador de resultados y estado de cache */}
+            <div className="flex items-center gap-3">
+              {showSearchResults && (
+                <span className="text-sm text-gray-600 whitespace-nowrap">
+                  <span className="font-semibold text-blue-600">{searchResults.total}</span> resultados
+                </span>
+              )}
+              
+              {/* Indicador de carga de imágenes en background */}
+              {preloadingBackground && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+                  <span>Optimizando imágenes...</span>
+                </div>
+              )}
+            </div>
           </div>
           
           {/* Segunda fila: Controles de pedido */}
@@ -864,16 +1243,22 @@ export const ProductsDynamic: React.FC = () => {
               {(showSearchResults ? searchResults.categories : categories).map((category) => {
                 const Icon = getCategoryIcon(category.name);
                 const isSelected = selectedCategory === category.id;
-                const catCount = subcategories.filter(s => s.category_id === category.id).length;
-                const catProds = products.filter(p => p.category_id === category.id).length;
+                // Usar datos del cache que tienen TODA la información
+                const catCount = subcategoriesCache.get(category.id!) ? subcategoriesCache.get(category.id!)!.length : 0;
+                const catProds = productsCache.get(category.id!) ? productsCache.get(category.id!)!.length : 0;
 
                 return (
                   <motion.div
                     key={category.id}
                     whileHover={{ x: 5 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      setSelectedCategory(category.id!);
+                    onClick={(e) => {
+                      // Prevenir cambio de categoría cuando se hace clic en botones de edición
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button')) {
+                        return;
+                      }
+                      handleCategoryChange(category.id!);
                       setSelectedSubcategory('all'); // Por defecto mostrar todos los productos
                       setSearchTerm(''); // Limpiar búsqueda al seleccionar categoría
                     }}
@@ -1006,7 +1391,12 @@ export const ProductsDynamic: React.FC = () => {
                       key={subcategory.id}
                       whileHover={{ x: 5 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => {
+                      onClick={(e) => {
+                        // Prevent event propagation to avoid double clicks
+                        const target = e.target as HTMLElement;
+                        if (target.closest('button')) {
+                          return;
+                        }
                         setSelectedSubcategory(subcategory.id!);
                         setSearchTerm(''); // Limpiar búsqueda
                       }}
@@ -1106,16 +1496,19 @@ export const ProductsDynamic: React.FC = () => {
                     className="relative bg-white rounded-xl shadow-lg hover:shadow-xl transition-all overflow-hidden border border-gray-100 h-full flex flex-col"
                   >
                     {/* Imagen de fondo con gradiente */}
-                    <div
-                      className="h-32 bg-gradient-to-br from-blue-400 to-purple-500 relative"
-                      style={{
-                        backgroundImage: product.image_url
-                          ? `url(${product.image_url})`
-                          : `url('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop')`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center'
-                      }}
-                    >
+                    <div className="h-32 relative">
+                      <ImageWithSkeleton
+                        src={product.image_url}
+                        alt={product.name}
+                        fallbackSrc="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"
+                        className="w-full h-full rounded-t-xl"
+                        onLoad={() => {
+                          // console.log(`Image loaded for product: ${product.name}`);
+                        }}
+                        onError={() => {
+                          // console.log(`Image failed to load for product: ${product.name}`);
+                        }}
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                       {/* Badge de disponibilidad */}
                       <div className="absolute top-2 left-2">
@@ -1142,6 +1535,7 @@ export const ProductsDynamic: React.FC = () => {
                           onClick={() => {
                             setEditingItem(product);
                             setEditingType('product');
+                            setActiveProductTab('general'); // Resetear a pestaña general
                           }}
                           className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
                         >

@@ -412,7 +412,7 @@ export const CustomersManagement: React.FC<Props> = ({
       )}
       
       {/* Barra de búsqueda */}
-      <div className={`bg-white shadow-sm border-b px-6 py-6 ${isModal ? 'rounded-t-xl' : ''}`}>
+      <div className={`bg-white shadow-sm border-b ${isModal ? 'rounded-t-xl' : ''}`}>
         <div className="flex items-center gap-4">
           {isModal && (
             <h2 className="text-xl font-bold text-gray-800">Buscar o Crear Cliente</h2>

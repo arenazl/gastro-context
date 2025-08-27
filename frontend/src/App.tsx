@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LocalizationProvider } from './contexts/LocalizationContext';
 import { ToastContainer } from 'react-toastify';
@@ -13,7 +14,6 @@ import { KitchenKanban as Kitchen } from './pages/KitchenKanban';
 import { KitchenDragDrop } from './pages/KitchenDragDrop';
 import { POSModern as POS } from './pages/POSModern';
 import { ProductsModern as Products } from './pages/ProductsModern';
-import { ProductsManagement } from './pages/ProductsManagement';
 import { ProductsDynamic as ProductsComplete } from './pages/ProductsDynamic';
 import { CustomersManagement } from './pages/CustomersManagement';
 import { CompaniesManagement } from './pages/CompaniesManagement';
@@ -26,10 +26,11 @@ import { LocalizationSettings } from './pages/LocalizationSettings';
 import { TablesManagement } from './pages/TablesManagement';
 import { Reports } from './pages/Reports';
 import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
-import { CustomerMenu } from './pages/CustomerMenu';
-import { InteractiveMenuAI } from './pages/InteractiveMenuAI';
+// import { CustomerMenu } from './pages/CustomerMenu';  // MOVIDO A LEGACY
+// import { InteractiveMenuAI } from './pages/InteractiveMenuAI';  // MOVIDO A LEGACY
 import { InteractiveMenuSingleScreen } from './pages/InteractiveMenuSingleScreen';
 import { QRManager } from './pages/QRManager';
+import { EmployeesManagement } from './pages/EmployeesManagement';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 
@@ -39,7 +40,8 @@ function App() {
       <LocalizationProvider>
         <Router>
           <AuthProvider>
-          <ThemeSwitcher />
+            <PermissionsProvider>
+              <ThemeSwitcher />
           <ToastContainer 
             position="top-right"
             autoClose={3000}
@@ -144,16 +146,6 @@ function App() {
             }
           />
           
-          <Route
-            path="/products-management"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <ProductsManagement />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
           
           <Route
             path="/products-old"
@@ -241,6 +233,17 @@ function App() {
           />
 
           <Route
+            path="/employees-management"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <EmployeesManagement />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/settings/general"
             element={
               <ProtectedRoute>
@@ -304,6 +307,7 @@ function App() {
             path="/menu/:tableId"
             element={<InteractiveMenuSingleScreen />}
           />
+          {/* Rutas legacy - comentadas porque los componentes fueron movidos a legacy
           <Route
             path="/menu-chat/:tableId"
             element={<InteractiveMenuAI />}
@@ -312,7 +316,9 @@ function App() {
             path="/menu-classic/:tableId"
             element={<CustomerMenu />}
           />
+          */}
         </Routes>
+            </PermissionsProvider>
           </AuthProvider>
         </Router>
       </LocalizationProvider>

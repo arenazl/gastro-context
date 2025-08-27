@@ -996,7 +996,7 @@ export const GeneralSettings: React.FC = () => {
         ]}
       />
 
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Tabs */}
         <div className="mb-6 overflow-x-auto">
           <div className="flex gap-2 min-w-max">

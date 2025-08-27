@@ -133,24 +133,21 @@ a,
 
 /* Header de categoría */
 .category-title {
-  background: linear-gradient(135deg, rgba(147, 51, 234, 0.95) 0%, rgba(236, 72, 153, 0.95) 100%);
   position: absolute;
   left: 0;
   top: 0;
   right: 0;
   height: 105px; /* Ajustado para coincidir con li height */
   z-index: 10;
-  display: flex;
-  align-items: center;
-  padding: 0 30px;
   cursor: pointer;
   transition: all 0.3s ease;
+  overflow: hidden; /* Para contener el blur */
 }
 
 .category-accordion li:hover .category-title,
 .category-accordion li.auto-expanded .category-title {
-  background: linear-gradient(135deg, rgba(147, 51, 234, 1) 0%, rgba(236, 72, 153, 1) 100%);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
 }
 
 /* Contenido de productos */

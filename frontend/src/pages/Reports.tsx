@@ -640,7 +640,7 @@ export const Reports: React.FC = () => {
         subtitle="Análisis detallado del rendimiento del restaurante"
       />
 
-      <div className="px-6 py-4">
+      <div className="">
         {/* Barra de herramientas */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">

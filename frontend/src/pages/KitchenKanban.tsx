@@ -393,7 +393,7 @@ export const KitchenKanban: React.FC = () => {
       </div>
 
       {/* Contenedor Kanban */}
-      <div className="flex-1 overflow-hidden p-4">
+      <div className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-3 gap-4">
           {Object.entries(statusConfig).map(([status, config]) => {
             const columnOrders = sortOrdersByUrgency(orders.filter(o => o.status === status));

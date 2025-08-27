@@ -354,7 +354,7 @@ export const CompaniesManagement: React.FC = () => {
         ]}
       />
 
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Panel de Empresas */}
         <GlassPanel delay={0.1}>

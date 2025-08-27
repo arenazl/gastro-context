@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import dataFetchService from '../services/dataFetchService';
 
 import {
   ShoppingCartIcon,
@@ -35,6 +36,7 @@ interface CurrentView {
     left: Product[];
     right: Product[];
   };
+  isIngredientsView?: boolean; // Flag para vista de ingredientes
 }
 
 export const InteractiveMenuSingleScreen: React.FC = () => {
@@ -48,8 +50,12 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
   const [centerProduct, setCenterProduct] = useState<Product | null>(null);
   const [previousCenterProduct, setPreviousCenterProduct] = useState<Product | null>(null);
   const [pairingOrigin, setPairingOrigin] = useState<'left' | 'right' | null>(null);
+  const [hidingCenterProduct, setHidingCenterProduct] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitioningProductId, setTransitioningProductId] = useState<number | null>(null);
   const [floatingMessage, setFloatingMessage] = useState<string | null>(null); // 🎬 MENSAJE FLOTANTE PARA SALUDOS
-  const [showCartModal, setShowCartModal] = useState(false); // Modal del carrito
+  const [showCartDropdown, setShowCartDropdown] = useState(false); // Dropdown del carrito
+  const [previousView, setPreviousView] = useState<CurrentView | null>(null); // Estado anterior antes de seleccionar producto
 
   const inputRef = useRef<HTMLInputElement>(null);
   const cartIconRef = useRef<HTMLDivElement>(null);
@@ -81,31 +87,50 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
   }, []);
 
   const selectProductAndGetPairings = async (product: Product, fromSide?: 'left' | 'right') => {
-    // Si viene del costado, guardar el producto central actual
+    // Guardar el estado actual antes de seleccionar el producto
+    if (!previousView && currentView.type === 'response') {
+      setPreviousView(currentView);
+    }
+    
+    // Si viene del costado, guardar el producto central actual y animar transición
     if (fromSide) {
+      // Marcar el producto como en transición
+      setTransitioningProductId(product.id);
+      setIsTransitioning(true);
+      setPairingOrigin(fromSide);
+      
       const current = centerProduct || currentView.selectedProduct;
       if (current) {
         setPreviousCenterProduct(current);
       }
-      setCenterProduct(product);
-      setPairingOrigin(fromSide);
+      
+      // Delay para la animación visual
+      setTimeout(() => {
+        setCenterProduct(product);
+        // Después de un poco más, quitar la marca de transición
+        setTimeout(() => {
+          setIsTransitioning(false);
+          setTransitioningProductId(null);
+          setPairingOrigin(null);
+        }, 400);
+      }, 300);
     } else {
       setCenterProduct(product);
       setPreviousCenterProduct(null);
       setPairingOrigin(null);
     }
 
-    // Mostrar el producto seleccionado
-    setCurrentView({
+    // Mostrar el producto seleccionado manteniendo los pairings anteriores para evitar parpadeo
+    setCurrentView(prev => ({
       type: 'product-selected',
       selectedProduct: product,
       aiResponse: `¡Excelente elección! ${product.name}`,
-      pairings: { left: [], right: [] }
-    });
+      pairings: prev.pairings || { left: [], right: [] } // Mantener los pairings anteriores
+    }));
 
     // Obtener maridajes de la IA
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/pairings`, {
+      const data = await dataFetchService.fetch(`${API_BASE_URL}/api/chat/pairings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,10 +138,11 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
           product: product.name,
           category: product.category || product.category_name,
           threadId: threadId
-        })
+        }),
+        showNotification: false,
+        cacheDuration: 5 * 60 * 1000
       });
 
-      const data = await response.json();
       console.log('Maridajes recibidos:', data);
 
       // Dividir maridajes en dos grupos: entradas/acompañamientos a la izquierda, bebidas a la derecha
@@ -173,6 +199,30 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
     // Crear animación de vuelo
     const flyId = `fly-${Date.now()}-${Math.random()}`;
     setFlyingProducts(prev => [...prev, { product, id: flyId, startPos }]);
+    
+    // Si es el producto del centro, ocultarlo y volver al estado anterior
+    if (currentView.selectedProduct && product.id === currentView.selectedProduct.id) {
+      setHidingCenterProduct(true);
+      
+      // Después de agregar al carrito, volver al estado anterior (carrusel con pairings)
+      setTimeout(() => {
+        // Restaurar el estado anterior si existe, sino mantener la respuesta actual
+        if (previousView && previousView.type === 'response') {
+          setCurrentView(previousView);
+          setPreviousView(null); // Limpiar el estado guardado
+        } else {
+          // Si no hay estado anterior, mantener el carrusel pero sin producto seleccionado
+          setCurrentView(prev => ({
+            ...prev,
+            selectedProduct: null,
+            pairings: prev.pairings // Mantener los pairings laterales
+          }));
+        }
+        setHidingCenterProduct(false);
+        setCenterProduct(null);
+        setPreviousCenterProduct(null);
+      }, 800);
+    }
 
     // Agregar al carrito después de la animación
     setTimeout(() => {
@@ -209,16 +259,17 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
     // Después de 2 segundos, cambiar a respuesta
     setTimeout(async () => {
       try {
-        const response = await fetch(API_ENDPOINTS.chatMenuAI, {
+        const data = await dataFetchService.fetch(API_ENDPOINTS.chatMenuAI, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: userText,
             threadId: threadId
-          })
+          }),
+          showNotification: true,
+          cacheDuration: 10 * 60 * 1000, // Cache por 10 minutos
+          cacheKey: `chat_${userText.toLowerCase().trim()}` // Cache por query
         });
-
-        const data = await response.json();
 
         // 🎬 SI ES SALUDO CON MENSAJE FLOTANTE - USANDO SESSIONSTORAGE
         if (data.query_type === 'greeting' && data.show_animated_message) {
@@ -250,12 +301,24 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             categorizedProds = data.categorizedProducts;
           }
 
-          setCurrentView({
-            type: 'response',
-            aiResponse: data.response,
-            categorizedProducts: categorizedProds,
-            products: data.recommendedProducts || []
-          });
+          // Detectar si es respuesta de ingredientes
+          if (data.query_type === 'specific_product_ingredients' && data.recommendedProducts?.length === 1) {
+            // Vista especial para ingredientes: producto + explicación
+            setCurrentView({
+              type: 'response',
+              aiResponse: data.response,
+              products: data.recommendedProducts,
+              isIngredientsView: true // Flag para renderizado especial
+            });
+          } else {
+            // Vista normal con categorías
+            setCurrentView({
+              type: 'response',
+              aiResponse: data.response,
+              categorizedProducts: categorizedProds,
+              products: data.recommendedProducts || []
+            });
+          }
         }
       } catch (error) {
         console.error('Error:', error);
@@ -292,19 +355,19 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         ))}
       </div>
 
-      {/* Carrito flotante - arriba a la derecha */}
-      <motion.div
-        ref={cartIconRef}
-        className="fixed top-6 right-8 z-50"
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        onClick={() => setShowCartModal(true)}
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', damping: 20 }}
-      >
+      {/* Carrito con dropdown integrado - posición relativa para dropdown */}
+      <div className="fixed top-6 right-8 z-50">
         <div className="relative">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur-md rounded-full p-4 shadow-2xl cursor-pointer">
+          <motion.div
+            ref={cartIconRef}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setShowCartDropdown(!showCartDropdown)}
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 20 }}
+            className="bg-gradient-to-r from-purple-600 to-pink-600 backdrop-blur-md rounded-full p-4 shadow-2xl cursor-pointer"
+          >
             <ShoppingCartIcon className="w-8 h-8 text-white" />
             {cartTotal > 0 && (
               <motion.div
@@ -315,9 +378,48 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 {cartTotal}
               </motion.div>
             )}
-          </div>
+          </motion.div>
+          
+          {/* Dropdown del carrito - posicionado absolutamente debajo del ícono */}
+          <AnimatePresence>
+            {showCartDropdown && cart.length > 0 && (
+              <motion.div
+                initial={{ y: -20, opacity: 0, scale: 0.95 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: -20, opacity: 0, scale: 0.95 }}
+                transition={{ type: "spring", damping: 20, stiffness: 300 }}
+                className="absolute right-0 top-16 bg-white rounded-2xl shadow-2xl p-4 min-w-[300px] max-w-[350px]"
+              >
+                <h3 className="font-bold text-gray-800 mb-3 text-lg">Tu pedido</h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg">
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                        <span className="text-xs text-gray-500 block">x{item.quantity}</span>
+                      </div>
+                      <span className="font-semibold text-purple-600">${(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t mt-3 pt-3">
+                  <div className="flex justify-between font-bold mb-3">
+                    <span>Total:</span>
+                    <span className="text-purple-600 text-xl">${cartTotal.toFixed(2)}</span>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold"
+                  >
+                    Confirmar Pedido
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </motion.div>
+      </div>
 
       {/* Productos volando al carrito */}
 
@@ -336,15 +438,16 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 opacity: 1
               }}
               animate={{
-                x: cartPos?.left || window.innerWidth - 100,
-                y: cartPos?.top || 50,
-                scale: 0.2,
-                opacity: 0.8
+                x: [startPos.x, startPos.x, cartPos?.left || window.innerWidth - 100],
+                y: [startPos.y, startPos.y - 100, cartPos?.top || 50],
+                scale: [1, 0.8, 0.2],
+                opacity: [1, 0.9, 0.8]
               }}
               exit={{ opacity: 0 }}
               transition={{
-                duration: 0.6,
-                ease: "easeInOut"
+                duration: 0.8,
+                ease: "easeInOut",
+                times: [0, 0.4, 1]
               }}
             >
               <div className="bg-white rounded-lg p-2 shadow-xl">
@@ -421,8 +524,61 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Respuesta con productos */}
-          {currentView.type === 'response' && currentView.categorizedProducts && (
+          {/* Vista especial para ingredientes */}
+          {currentView.type === 'response' && currentView.isIngredientsView && currentView.products && (
+            <motion.div
+              key="ingredients-view"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-4xl"
+            >
+              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 flex gap-8">
+                {/* Producto a la izquierda */}
+                <div className="flex-shrink-0 w-1/3">
+                  {currentView.products[0] && (
+                    <div className="text-center">
+                      {currentView.products[0].image_url ? (
+                        <img
+                          src={currentView.products[0].image_url}
+                          alt={currentView.products[0].name}
+                          className="w-full h-48 object-cover rounded-xl mb-4"
+                        />
+                      ) : (
+                        <div className="w-full h-48 bg-gradient-to-br from-purple-400 to-pink-400 rounded-xl mb-4" />
+                      )}
+                      <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                        {currentView.products[0].name}
+                      </h3>
+                      <p className="text-3xl font-bold text-purple-600">
+                        ${(currentView.products[0].price || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Descripción de ingredientes a la derecha */}
+                <div className="flex-grow">
+                  <h3 className="text-xl font-semibold text-gray-700 mb-4">¿Qué tiene?</h3>
+                  <p className="text-gray-700 text-lg leading-relaxed">
+                    {currentView.aiResponse}
+                  </p>
+                  
+                  {/* Botón para agregar al carrito */}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={(e) => currentView.products[0] && addToCart(currentView.products[0], e)}
+                    className="mt-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-6 rounded-xl hover:shadow-lg transition-shadow"
+                  >
+                    Agregar al carrito
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Respuesta normal con productos */}
+          {currentView.type === 'response' && !currentView.isIngredientsView && currentView.categorizedProducts && (
             <motion.div
               key="response"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -441,16 +597,43 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               {/* Acordeón de categorías */}
               <div className="category-accordion" style={{ zIndex: 1 }}>
                 <ul>
-                  {Object.entries(currentView.categorizedProducts).slice(0, 4).map(([category, products], index) => (
-                    <li key={category} className={Object.keys(currentView.categorizedProducts).length === 1 ? 'auto-expanded' : ''}>
-                      <div className="category-title">
-                        <h3 className="text-2xl font-bold text-white">
-                          {category}
-                        </h3>
-                        <span className="text-white/80 ml-auto">
-                          {products.length} opciones
-                        </span>
-                      </div>
+                  {Object.entries(currentView.categorizedProducts).slice(0, 4).map(([category, products], index) => {
+                    // Obtener una imagen aleatoria de los productos que tengan imagen
+                    const productsWithImages = products.filter(p => p.image_url);
+                    const randomProduct = productsWithImages.length > 0 
+                      ? productsWithImages[Math.floor(Math.random() * productsWithImages.length)]
+                      : products[0];
+                    const backgroundImage = randomProduct?.image_url;
+                    
+                    return (
+                      <li key={category} className={Object.keys(currentView.categorizedProducts).length === 1 ? 'auto-expanded' : ''}>
+                        <div className="category-title relative overflow-hidden">
+                          {/* Imagen de fondo con blur suave */}
+                          {backgroundImage && (
+                            <div 
+                              className="absolute inset-0 z-0"
+                              style={{
+                                backgroundImage: `url(${backgroundImage})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                                filter: 'blur(2px) brightness(0.7) saturate(1.2)',
+                                transform: 'scale(1.05)' // Para evitar bordes blancos por el blur
+                              }}
+                            />
+                          )}
+                          {/* Overlay gradiente más suave */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/50 to-pink-900/50 z-10" />
+                          
+                          {/* Contenido del título */}
+                          <div className="relative z-20 flex items-center justify-between h-full px-8">
+                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
+                              {category}
+                            </h3>
+                            <span className="text-white/90 ml-auto font-medium drop-shadow">
+                              {products.length} opciones
+                            </span>
+                          </div>
+                        </div>
 
                       <div className="category-products">
                         <div className="products-grid-accordion">
@@ -498,7 +681,8 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                         </div>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </div>
             </motion.div>
@@ -595,14 +779,18 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 }}
               >
                 <motion.div 
-                  className="bg-white rounded-3xl shadow-2xl p-8 max-w-md"
+                  className="bg-white rounded-3xl shadow-2xl p-4 md:p-6 lg:p-8 max-w-xs md:max-w-sm lg:max-w-md w-full"
                   animate={{
-                    y: [0, -5, 0],
+                    scale: hidingCenterProduct ? 0 : 1,
+                    opacity: hidingCenterProduct ? 0 : 1,
+                    y: hidingCenterProduct ? -100 : [0, -5, 0],
                   }}
                   transition={{
+                    scale: { duration: 0.6, ease: "easeInOut" },
+                    opacity: { duration: 0.3 },
                     y: {
-                      duration: 4,
-                      repeat: Infinity,
+                      duration: hidingCenterProduct ? 0.6 : 4,
+                      repeat: hidingCenterProduct ? 0 : Infinity,
                       ease: "easeInOut"
                     }
                   }}
@@ -611,22 +799,22 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                     <img
                       src={currentView.selectedProduct.image_url}
                       alt={currentView.selectedProduct.name}
-                      className="w-full h-64 object-cover rounded-2xl mb-4"
+                      className="w-full h-32 md:h-48 lg:h-64 object-cover rounded-2xl mb-3 md:mb-4"
                     />
                   ) : (
-                    <div className="w-full h-64 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl mb-4" />
+                    <div className="w-full h-32 md:h-48 lg:h-64 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl mb-3 md:mb-4" />
                   )}
-                  <h2 className="text-3xl font-bold mb-2">{currentView.selectedProduct.name}</h2>
-                  <p className="text-gray-600 mb-4">{currentView.selectedProduct.description}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-4xl font-bold text-purple-600">
+                  <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-1 md:mb-2">{currentView.selectedProduct.name}</h2>
+                  <p className="text-sm md:text-base text-gray-600 mb-3 md:mb-4">{currentView.selectedProduct.description}</p>
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-3">
+                    <span className="text-2xl md:text-3xl lg:text-4xl font-bold text-purple-600">
                       ${(currentView.selectedProduct.price || 0).toFixed(2)}
                     </span>
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={(e) => addToCart(currentView.selectedProduct!, e)}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg"
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 md:px-6 py-2 md:py-3 text-sm md:text-base rounded-xl font-semibold shadow-lg w-full md:w-auto"
                     >
                       Agregar al carrito
                     </motion.button>
@@ -801,16 +989,16 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Modal del Carrito */}
+      {/* Modal del Carrito - DESACTIVADO, usando dropdown ahora */}
       <AnimatePresence>
-        {showCartModal && (
+        {false && showCartDropdown && (
           <>
             {/* Overlay */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowCartModal(false)}
+              onClick={() => setShowCartDropdown(false)}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
             />
             
@@ -833,7 +1021,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => setShowCartModal(false)}
+                    onClick={() => setShowCartDropdown(false)}
                     className="p-2 rounded-full bg-gray-100 hover:bg-gray-200"
                   >
                     <XMarkIcon className="w-6 h-6 text-gray-600" />
@@ -941,7 +1129,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                         whileTap={{ scale: 0.98 }}
                         onClick={() => {
                           setCart([]);
-                          setShowCartModal(false);
+                          setShowCartDropdown(false);
                         }}
                         className="flex-1 py-3 px-6 rounded-xl border-2 border-gray-300 font-semibold hover:bg-gray-50"
                       >
@@ -955,7 +1143,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                         onClick={() => {
                           // Aquí iría la lógica para procesar el pedido
                           alert('¡Procesando tu pedido!');
-                          setShowCartModal(false);
+                          setShowCartDropdown(false);
                         }}
                       >
                         Procesar Pedido

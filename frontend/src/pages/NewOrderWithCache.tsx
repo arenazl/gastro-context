@@ -23,6 +23,7 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  ChevronRightIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
 
@@ -51,6 +52,14 @@ interface CartItem {
   notes?: string;
 }
 
+// Extender el objeto window para TypeScript
+declare global {
+  interface Window {
+    refreshOrders?: () => void;
+    kitchenSocket?: WebSocket;
+  }
+}
+
 interface Table {
   id: number;
   number: number;
@@ -59,12 +68,27 @@ interface Table {
   status: string;
 }
 
+interface Address {
+  id: number;
+  customer_id: number;
+  street_address: string;
+  city: string;
+  state_province?: string;
+  postal_code?: string;
+  country?: string;
+  is_default: boolean;
+  delivery_instructions?: string;
+  formatted_address?: string;
+}
+
 interface Customer {
   id: number;
-  name: string;
-  email: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
   phone: string;
-  address?: string;
+  dni?: string;
+  addresses?: Address[];
 }
 
 interface Subcategory {
@@ -90,6 +114,11 @@ export const NewOrderWithCache: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  
+  // Estados de tipo de orden
+  const [orderType, setOrderType] = useState<'delivery' | 'salon'>('salon');
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  const [numberOfPeople, setNumberOfPeople] = useState<number>(1);
 
   // Estados de UI
   const [selectedCategory, setSelectedCategory] = useState<number | 'all' | null>(null);
@@ -102,20 +131,31 @@ export const NewOrderWithCache: React.FC = () => {
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [showCart, setShowCart] = useState(false);
+  const [showCart, setShowCart] = useState(true);
+  const [cartCollapsed, setCartCollapsed] = useState(false);
+  const [activeCartTab, setActiveCartTab] = useState<'items' | 'payment'>('items');
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [cacheIndicator, setCacheIndicator] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<number>(1);
   const [showOrdersPanel, setShowOrdersPanel] = useState(false);
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
+  const [activeSection, setActiveSection] = useState<'cart' | 'payment' | 'cash'>('cart');
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   // Cargar datos iniciales (solo categorías y mesas)
   useEffect(() => {
     loadInitialData();
     loadActiveOrders();
     const interval = setInterval(loadActiveOrders, 10000);
-    return () => clearInterval(interval);
+    
+    // Exponer la función globalmente para que pueda ser llamada desde otros componentes
+    window.refreshOrders = loadActiveOrders;
+    
+    return () => {
+      clearInterval(interval);
+      window.refreshOrders = undefined;
+    };
   }, []);
 
   // Cargar productos cuando cambia la categoría (pero NO al inicio)
@@ -174,8 +214,16 @@ export const NewOrderWithCache: React.FC = () => {
       setProducts(productsCache.get(categoryId) || []);
       setSubcategories(subcategoriesCache.get(categoryId) || []);
 
-      // Mostrar indicador de cache
+      // Mostrar indicador de cache con toast mejorado
       setCacheIndicator('⚡ desde cache');
+      toast.success('✨ Obtenidos automáticamente desde el caché', {
+        position: "bottom-center",
+        autoClose: 2000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: false,
+      });
       setTimeout(() => setCacheIndicator(null), 2000);
       return;
     }
@@ -184,6 +232,19 @@ export const NewOrderWithCache: React.FC = () => {
     setProducts([]);
     setSubcategories([]);
     setLoadingProducts(true);
+
+    // Mostrar notificación de carga desde BD
+    const loadingToastId = toast.info(
+      '🔄 Obteniendo información desde la base de datos...\nLas siguientes llamadas se realizarán mucho más rápido',
+      {
+        position: "bottom-center",
+        autoClose: false,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: false,
+        draggable: false,
+      }
+    );
 
     try {
       if (categoryId === 'all') {
@@ -211,6 +272,13 @@ export const NewOrderWithCache: React.FC = () => {
         // Indicador de datos frescos
         setCacheIndicator('✓ actualizado');
         setTimeout(() => setCacheIndicator(null), 2000);
+        
+        // Cerrar toast de carga y mostrar éxito
+        toast.dismiss(loadingToastId);
+        toast.success('✅ Datos actualizados desde la base de datos', {
+          position: "bottom-center",
+          autoClose: 2000,
+        });
       } else {
         // Cargar subcategorías y productos de la categoría específica
         const [subcatRes, productsRes] = await Promise.all([
@@ -236,9 +304,17 @@ export const NewOrderWithCache: React.FC = () => {
         // Indicador de datos frescos
         setCacheIndicator('✓ actualizado');
         setTimeout(() => setCacheIndicator(null), 2000);
+        
+        // Cerrar toast de carga y mostrar éxito
+        toast.dismiss(loadingToastId);
+        toast.success('✅ Datos actualizados desde la base de datos', {
+          position: "bottom-center",
+          autoClose: 2000,
+        });
       }
     } catch (error) {
       console.error('Error cargando productos:', error);
+      toast.dismiss(loadingToastId);
       toast.error('Error cargando productos');
     } finally {
       setLoadingProducts(false);
@@ -259,9 +335,24 @@ export const NewOrderWithCache: React.FC = () => {
 
   const searchCustomers = async (query: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/customers?search=${encodeURIComponent(query)}`);
+      const response = await fetch(`${API_BASE_URL}/api/customers/search?q=${encodeURIComponent(query)}`);
       const data = await response.json();
-      setCustomers(data);
+      
+      // Cargar direcciones para cada cliente
+      const customersWithAddresses = await Promise.all(
+        data.map(async (customer: Customer) => {
+          try {
+            const addressRes = await fetch(`${API_BASE_URL}/api/customers/${customer.id}/addresses`);
+            const addresses = await addressRes.json();
+            return { ...customer, addresses };
+          } catch (error) {
+            console.error(`Error cargando direcciones para cliente ${customer.id}:`, error);
+            return { ...customer, addresses: [] };
+          }
+        })
+      );
+      
+      setCustomers(customersWithAddresses);
       setShowCustomerDropdown(true);
     } catch (error) {
       console.error('Error buscando clientes:', error);
@@ -340,21 +431,57 @@ export const NewOrderWithCache: React.FC = () => {
   });
 
   const submitOrder = async () => {
-    if (!selectedTable || cart.length === 0) {
+    // Validación del carrito
+    if (cart.length === 0) {
       await Swal.fire({
-        title: 'Datos incompletos',
-        text: 'Por favor selecciona una mesa y agrega productos al carrito',
+        title: 'Carrito vacío',
+        text: 'Por favor agrega productos al carrito',
         icon: 'error',
         confirmButtonColor: theme.colors.primary
       });
       return;
     }
 
+    // Validación según tipo de orden
+    if (orderType === 'salon') {
+      if (!selectedTable) {
+        await Swal.fire({
+          title: 'Mesa requerida',
+          text: 'Por favor selecciona una mesa para la orden de salón',
+          icon: 'error',
+          confirmButtonColor: theme.colors.primary
+        });
+        return;
+      }
+    } else { // delivery
+      if (!selectedCustomer) {
+        await Swal.fire({
+          title: 'Cliente requerido',
+          text: 'Por favor selecciona un cliente para el delivery',
+          icon: 'error',
+          confirmButtonColor: theme.colors.primary
+        });
+        return;
+      }
+      if (!selectedAddress) {
+        await Swal.fire({
+          title: 'Dirección requerida',
+          text: 'Por favor selecciona una dirección de entrega',
+          icon: 'error',
+          confirmButtonColor: theme.colors.primary
+        });
+        return;
+      }
+    }
+
     // Primero crear la orden
     try {
       const orderData = {
-        table_number: selectedTable.number,
+        order_type: orderType,
+        table_number: orderType === 'salon' ? selectedTable?.number : null,
         customer_id: selectedCustomer?.id || null,
+        delivery_address_id: orderType === 'delivery' ? selectedAddress?.id : null,
+        number_of_people: orderType === 'salon' ? numberOfPeople : null,
         items: cart,
         subtotal: cartSubtotal,
         tax: cartTax,
@@ -374,12 +501,21 @@ export const NewOrderWithCache: React.FC = () => {
       const createdOrder = await response.json();
       setCurrentOrderId(createdOrder.id);
 
-      // Abrir modal de pago
-      setShowPaymentModal(true);
+      // Mostrar éxito
+      toast.success(`✅ Orden #${createdOrder.id} creada exitosamente`);
+      
+      // NO limpiar el carrito aquí - solo después del pago
+      // Solo actualizar el ID de la orden actual
+      setCurrentOrderId(createdOrder.id);
+      loadActiveOrders(); // Recargar órdenes activas
+      
+      // Retornar los datos de la orden para MercadoPago
+      return createdOrder;
 
     } catch (error) {
       console.error('Error:', error);
       toast.error('Error al procesar la orden');
+      return null;
     }
   };
 
@@ -523,91 +659,203 @@ export const NewOrderWithCache: React.FC = () => {
               {/* Panel Principal - Productos */}
               <div className="lg:col-span-2 space-y-4">
 
-                {/* Selección de Mesa y Cliente - Sticky y compacto */}
+                {/* Selección de Tipo de Orden y Datos - Sticky y compacto */}
                 <div className="sticky top-20" style={{ zIndex: 5 }}>
                   <GlassPanel delay={0.1}>
-                    <div className="p-3">
-                      <h2 className="text-sm font-medium mb-2" style={{ color: theme.colors.text }}>
-                        {t('orders.tableAndCustomer')}
-                      </h2>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-
-                          <select
-                            value={selectedTable?.id || ''}
-                            onChange={(e) => {
-                              const table = tables.find(t => t.id === parseInt(e.target.value));
-                              setSelectedTable(table || null);
-                            }}
-                            className="block w-full rounded-lg px-3 py-1.5 text-sm"
-                            style={{
-                              backgroundColor: theme.colors.surface,
-                              borderColor: theme.colors.border,
-                              color: theme.colors.text
-                            }}
-                          >
-                            <option value="">Seleccionar mesa...</option>
-                            {tables.filter(table => table.status === 'available').map((table) => (
-                              <option key={table.id} value={table.id}>
-                                Mesa {table.number} - {table.location} ({table.capacity} personas)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="relative">
-
-                          <div className="relative">
-                            <UserIcon className="absolute left-2 top-2 h-4 w-4" style={{ color: theme.colors.textMuted }} />
-                            <input
-                              type="text"
-                              value={customerSearch}
-                              onChange={(e) => setCustomerSearch(e.target.value)}
-                              onFocus={() => setShowCustomerDropdown(true)}
-                              className="block w-full pl-8 pr-3 py-1.5 rounded-lg text-sm"
-                              style={{
-                                backgroundColor: theme.colors.surface,
-                                borderColor: theme.colors.border,
-                                color: theme.colors.text
-                              }}
-                              placeholder="Buscar cliente..."
-                            />
-
-                            <AnimatePresence>
-                              {showCustomerDropdown && customers.length > 0 && (
-                                <motion.div
-                                  initial={{ opacity: 0, y: -10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: -10 }}
-                                  className="absolute z-10 w-full mt-1 rounded-lg shadow-lg overflow-hidden max-h-32 overflow-y-auto"
-                                  style={{ backgroundColor: theme.colors.surface }}
-                                >
-                                  {customers.map((customer) => (
-                                    <motion.button
-                                      key={customer.id}
-                                      onClick={() => {
-                                        setSelectedCustomer(customer);
-                                        setCustomerSearch(customer.name);
-                                        setShowCustomerDropdown(false);
-                                        toast.info(`Cliente: ${customer.name}`, { autoClose: 1500 });
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-opacity-10 text-sm"
-                                      style={{ color: theme.colors.text }}
-                                      whileHover={{ backgroundColor: theme.colors.primaryLight + '20' }}
-                                    >
-                                      <div className="font-medium text-sm">{customer.name}</div>
-                                      <div className="text-xs" style={{ color: theme.colors.textMuted }}>
-                                        {customer.email} - {customer.phone}
-                                      </div>
-                                    </motion.button>
-                                  ))}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        </div>
+                    <div className="p-4">
+                      {/* Selector de tipo de orden */}
+                      <div className="flex gap-2 mb-4">
+                        <motion.button
+                          onClick={() => setOrderType('salon')}
+                          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
+                            orderType === 'salon' 
+                              ? 'bg-blue-600 text-white shadow-md' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          🍽️ Salón
+                        </motion.button>
+                        <motion.button
+                          onClick={() => setOrderType('delivery')}
+                          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
+                            orderType === 'delivery' 
+                              ? 'bg-green-600 text-white shadow-md' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          🚚 Delivery
+                        </motion.button>
                       </div>
+
+                      {/* Contenido dinámico según el tipo de orden */}
+                      <AnimatePresence mode="wait">
+                        {orderType === 'salon' ? (
+                          <motion.div
+                            key="salon"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                          >
+                            {/* Selector de mesa */}
+                            <div>
+                              <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.textMuted }}>
+                                Mesa
+                              </label>
+                              <select
+                                value={selectedTable?.id || ''}
+                                onChange={(e) => {
+                                  const table = tables.find(t => t.id === parseInt(e.target.value));
+                                  setSelectedTable(table || null);
+                                }}
+                                className="block w-full rounded-lg px-3 py-2 text-sm border"
+                                style={{
+                                  backgroundColor: theme.colors.surface,
+                                  borderColor: theme.colors.border,
+                                  color: theme.colors.text
+                                }}
+                              >
+                                <option value="">Seleccionar mesa...</option>
+                                {tables.filter(table => table.status === 'available').map((table) => (
+                                  <option key={table.id} value={table.id}>
+                                    Mesa {table.number} - {table.location} ({table.capacity} personas)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Cantidad de personas */}
+                            <div>
+                              <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.textMuted }}>
+                                Cantidad de personas
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="20"
+                                value={numberOfPeople}
+                                onChange={(e) => setNumberOfPeople(parseInt(e.target.value) || 1)}
+                                className="block w-full rounded-lg px-3 py-2 text-sm border"
+                                style={{
+                                  backgroundColor: theme.colors.surface,
+                                  borderColor: theme.colors.border,
+                                  color: theme.colors.text
+                                }}
+                              />
+                            </div>
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="delivery"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="space-y-3"
+                          >
+                            {/* Búsqueda de cliente */}
+                            <div>
+                              <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.textMuted }}>
+                                Cliente
+                              </label>
+                              <div className="relative">
+                                <UserIcon className="absolute left-3 top-2.5 h-4 w-4" style={{ color: theme.colors.textMuted }} />
+                                <input
+                                  type="text"
+                                  value={customerSearch}
+                                  onChange={(e) => setCustomerSearch(e.target.value)}
+                                  onFocus={() => setShowCustomerDropdown(true)}
+                                  className="block w-full pl-10 pr-3 py-2 rounded-lg text-sm border"
+                                  style={{
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border,
+                                    color: theme.colors.text
+                                  }}
+                                  placeholder="Buscar cliente por nombre, DNI o teléfono..."
+                                />
+
+                                <AnimatePresence>
+                                  {showCustomerDropdown && customers.length > 0 && (
+                                    <motion.div
+                                      initial={{ opacity: 0, y: -10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: -10 }}
+                                      className="absolute z-10 w-full mt-1 rounded-lg shadow-lg overflow-hidden max-h-48 overflow-y-auto"
+                                      style={{ backgroundColor: theme.colors.surface }}
+                                    >
+                                      {customers.map((customer) => (
+                                        <motion.button
+                                          key={customer.id}
+                                          onClick={() => {
+                                            setSelectedCustomer(customer);
+                                            setCustomerSearch(`${customer.first_name} ${customer.last_name}`);
+                                            setShowCustomerDropdown(false);
+                                            // Si tiene direcciones, seleccionar la predeterminada
+                                            if (customer.addresses && customer.addresses.length > 0) {
+                                              const defaultAddr = customer.addresses.find(a => a.is_default) || customer.addresses[0];
+                                              setSelectedAddress(defaultAddr);
+                                            }
+                                            toast.success(`Cliente seleccionado: ${customer.first_name} ${customer.last_name}`, { autoClose: 1500 });
+                                          }}
+                                          className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm border-b"
+                                          style={{ color: theme.colors.text }}
+                                        >
+                                          <div className="font-medium">{customer.first_name} {customer.last_name}</div>
+                                          <div className="text-xs" style={{ color: theme.colors.textMuted }}>
+                                            {customer.dni && `DNI: ${customer.dni} • `}{customer.phone}
+                                          </div>
+                                        </motion.button>
+                                      ))}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+
+                            {/* Selector de dirección si hay cliente seleccionado */}
+                            {selectedCustomer && selectedCustomer.addresses && selectedCustomer.addresses.length > 0 && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                              >
+                                <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.textMuted }}>
+                                  Dirección de entrega
+                                </label>
+                                <select
+                                  value={selectedAddress?.id || ''}
+                                  onChange={(e) => {
+                                    const addr = selectedCustomer.addresses?.find(a => a.id === parseInt(e.target.value));
+                                    setSelectedAddress(addr || null);
+                                  }}
+                                  className="block w-full rounded-lg px-3 py-2 text-sm border"
+                                  style={{
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border,
+                                    color: theme.colors.text
+                                  }}
+                                >
+                                  <option value="">Seleccionar dirección...</option>
+                                  {selectedCustomer.addresses.map((addr) => (
+                                    <option key={addr.id} value={addr.id}>
+                                      {addr.street_address}, {addr.city}
+                                      {addr.is_default && ' (Predeterminada)'}
+                                    </option>
+                                  ))}
+                                </select>
+                                {selectedAddress && selectedAddress.delivery_instructions && (
+                                  <p className="mt-1 text-xs" style={{ color: theme.colors.textMuted }}>
+                                    📝 {selectedAddress.delivery_instructions}
+                                  </p>
+                                )}
+                              </motion.div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </GlassPanel>
                 </div>
@@ -1019,11 +1267,11 @@ export const NewOrderWithCache: React.FC = () => {
                 </GlassPanel>
               </div>
 
-              {/* Panel del Carrito - Simplificado */}
-              <div className="sticky top-20" style={{ height: 'calc(100vh - 10rem)', marginBottom: '2rem' }}>
-                <GlassPanel delay={0.3} className="h-full flex flex-col relative">
-                  {/* Badge de número de orden - flotante en la esquina */}
-                  <div className="absolute -top-3 -right-3 z-10">
+              {/* Panel del Carrito - Stack Vertical Colapsable */}
+              <div className="sticky top-20" style={{ marginBottom: '2rem' }}>
+                {/* Badge de número de orden - flotante FUERA del panel */}
+                <div className="relative">
+                  <div className="absolute -top-3 -right-3 z-20">
                     <motion.div 
                       className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-2xl shadow-lg font-bold text-lg"
                       initial={{ scale: 0 }}
@@ -1034,53 +1282,100 @@ export const NewOrderWithCache: React.FC = () => {
                       ORDEN #{orderNumber.toString().padStart(3, '0')}
                     </motion.div>
                   </div>
+                </div>
+                
+                <GlassPanel delay={0.3} className="flex flex-col relative overflow-hidden" style={{ maxHeight: 'calc(100vh - 10rem)' }}>
                   
-                  {/* Header del carrito - fijo arriba */}
-                  <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: theme.colors.border, flexShrink: 0 }}>
-                    <h2 className="text-lg font-medium flex items-center gap-2" style={{ color: theme.colors.text }}>
-                      <ShoppingCartIcon className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                      {t('orders.cart')} ({cart.length})
-                    </h2>
-                    {cart.length > 0 && (
-                      <motion.button
-                        onClick={async () => {
-                          const result = await Swal.fire({
-                            title: '¿Vaciar carrito?',
-                            text: 'Se eliminarán todos los productos del carrito',
-                            icon: 'warning',
-                            showCancelButton: true,
-                            confirmButtonColor: theme.colors.error,
-                            cancelButtonColor: theme.colors.textMuted,
-                            confirmButtonText: 'Sí, vaciar',
-                            cancelButtonText: 'Cancelar'
-                          });
-
-                          if (result.isConfirmed) {
-                            setCart([]);
-                            toast.info(t('orders.cartCleared'));
-                          }
-                        }}
-                        className="text-sm"
-                        style={{ color: theme.colors.error }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        Vaciar
-                      </motion.button>
-                    )}
-                  </div>
-
-                  {cart.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center">
-                      <div className="text-center">
-                        <ShoppingCartIcon className="h-12 w-12 mx-auto mb-3" style={{ color: theme.colors.textMuted }} />
-                        <p style={{ color: theme.colors.textMuted }}>{t('orders.empty')}</p>
+                  {/* Sección 1: Carrito - Colapsable hacia arriba */}
+                  {activeSection === 'cart' && (
+                  <motion.div
+                    initial={false}
+                    animate={{ height: 'auto' }}
+                    className="border-b"
+                    style={{ borderColor: theme.colors.border }}
+                  >
+                    <div 
+                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        setCartCollapsed(!cartCollapsed);
+                        // Si estamos abriendo el carrito, volver a la sección del carrito
+                        if (cartCollapsed) {
+                          setActiveSection('cart');
+                          setPaymentOpen(false);
+                        }
+                      }}
+                    >
+                      <h2 className="text-lg font-medium flex items-center gap-2" style={{ color: theme.colors.text }}>
+                        <ShoppingCartIcon className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                        {t('orders.cart')} ({cart.length})
+                      </h2>
+                      <div className="flex items-center gap-3">
+                        {cart.length > 0 && !cartCollapsed && (
+                          <span className="text-sm font-bold" style={{ color: theme.colors.primary }}>
+                            ${cartTotal.toFixed(2)}
+                          </span>
+                        )}
+                        <motion.div
+                          animate={{ rotate: cartCollapsed ? 180 : 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <ChevronUpIcon className="h-5 w-5" style={{ color: theme.colors.text }} />
+                        </motion.div>
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      {/* Lista de items - con scroll */}
-                      <div className="overflow-y-auto p-4 space-y-3" style={{ flex: '1 1 0', minHeight: 0, maxHeight: 'calc(100vh - 24.2rem)' }}>
+
+
+                    {/* Contenido del carrito colapsable */}
+                    <AnimatePresence initial={false}>
+                      {!cartCollapsed && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: 'easeInOut' }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          {cart.length === 0 ? (
+                            <div className="p-8">
+                              <div className="text-center">
+                                <ShoppingCartIcon className="h-12 w-12 mx-auto mb-3" style={{ color: theme.colors.textMuted }} />
+                                <p style={{ color: theme.colors.textMuted }}>{t('orders.empty')}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              {/* Botón de vaciar carrito */}
+                              <div className="px-4 pb-2 flex justify-end">
+                                <motion.button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const result = await Swal.fire({
+                                      title: '¿Vaciar carrito?',
+                                      text: 'Se eliminarán todos los productos del carrito',
+                                      icon: 'warning',
+                                      showCancelButton: true,
+                                      confirmButtonColor: theme.colors.error,
+                                      cancelButtonColor: theme.colors.textMuted,
+                                      confirmButtonText: 'Sí, vaciar',
+                                      cancelButtonText: 'Cancelar'
+                                    });
+
+                                    if (result.isConfirmed) {
+                                      setCart([]);
+                                      toast.info(t('orders.cartCleared'));
+                                    }
+                                  }}
+                                  className="text-sm hover:text-red-600 transition-colors"
+                                  style={{ color: theme.colors.error }}
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                >
+                                  Vaciar carrito
+                                </motion.button>
+                              </div>
+                              
+                              {/* Lista de items - ultra compacta y responsive */}
+                              <div className="overflow-y-auto px-2 pb-2 space-y-1" style={{ maxHeight: '450px' }}>
                         <AnimatePresence>
                           {cart.map((item) => (
                             <motion.div
@@ -1089,121 +1384,432 @@ export const NewOrderWithCache: React.FC = () => {
                               initial={{ opacity: 0, x: 20 }}
                               animate={{ opacity: 1, x: 0 }}
                               exit={{ opacity: 0, x: -20 }}
-                              className="p-3"
-                              style={{ backgroundColor: theme.colors.surface }}
+                              className="p-1.5 rounded border"
+                              style={{ 
+                                backgroundColor: theme.colors.surface,
+                                borderColor: theme.colors.border + '30'
+                              }}
                             >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                  <h4 className="font-medium text-sm" style={{ color: theme.colors.text }}>
-                                    {item.product.name}
-                                  </h4>
-                                  <p className="text-xs" style={{ color: theme.colors.textMuted }}>
-                                    ${item.product.price} c/u
+                              <div className="flex items-center gap-2">
+                                {/* Info del producto - flexible y responsive */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <h4 className="font-medium text-xs truncate flex-1" style={{ color: theme.colors.text }}>
+                                      {item.product.name}
+                                    </h4>
+                                    <span className="font-bold text-xs flex-shrink-0" style={{ color: theme.colors.primary }}>
+                                      ${item.subtotal.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px]" style={{ color: theme.colors.textMuted }}>
+                                    ${item.product.price} × {item.quantity}
                                   </p>
                                 </div>
-                                <motion.button
-                                  onClick={() => removeFromCart(item.product.id)}
-                                  whileHover={{ scale: 1.2 }}
-                                  whileTap={{ scale: 0.8 }}
-                                >
-                                  <TrashIcon className="h-4 w-4" style={{ color: theme.colors.error }} />
-                                </motion.button>
-                              </div>
-
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
+                                
+                                {/* Controles ultra compactos */}
+                                <div className="flex items-center gap-0.5 flex-shrink-0">
                                   <motion.button
                                     onClick={() => updateCartItemQuantity(item.product.id, item.quantity - 1)}
-                                    className="w-6 h-6 rounded-full flex items-center justify-center shadow-sm border-2"
+                                    className="w-5 h-5 rounded flex items-center justify-center border"
                                     style={{
-                                      backgroundColor: 'white',
-                                      borderColor: theme.colors.primary
+                                      backgroundColor: theme.colors.surface,
+                                      borderColor: theme.colors.border,
+                                      fontSize: '14px'
                                     }}
-                                    whileHover={{
-                                      scale: 1.1,
-                                      backgroundColor: theme.colors.primary + '10'
-                                    }}
+                                    whileHover={{ backgroundColor: theme.colors.error + '10' }}
                                     whileTap={{ scale: 0.9 }}
                                   >
-                                    <MinusIcon className="h-3 w-3" style={{ color: theme.colors.primary }} />
+                                    <span style={{ marginTop: '-2px' }}>−</span>
                                   </motion.button>
 
-                                  <div className="min-w-[24px] text-center">
-                                    <span className="font-bold text-sm" style={{ color: theme.colors.primary }}>
+                                  <div className="w-6 text-center flex-shrink-0">
+                                    <span className="font-semibold text-xs" style={{ color: theme.colors.text }}>
                                       {item.quantity}
                                     </span>
                                   </div>
 
                                   <motion.button
                                     onClick={() => updateCartItemQuantity(item.product.id, item.quantity + 1)}
-                                    className="w-6 h-6 rounded-full flex items-center justify-center shadow-sm"
-                                    style={{ backgroundColor: theme.colors.primary }}
-                                    whileHover={{
-                                      scale: 1.1,
-                                      backgroundColor: theme.colors.primaryDark || theme.colors.primary
+                                    className="w-5 h-5 rounded flex items-center justify-center"
+                                    style={{ 
+                                      backgroundColor: theme.colors.primary,
+                                      fontSize: '14px',
+                                      color: 'white'
                                     }}
+                                    whileHover={{ backgroundColor: theme.colors.primaryDark || theme.colors.primary }}
                                     whileTap={{ scale: 0.9 }}
                                   >
-                                    <PlusIcon className="h-3 w-3" style={{ color: 'white' }} />
+                                    <span style={{ marginTop: '-2px' }}>+</span>
+                                  </motion.button>
+                                  
+                                  <motion.button
+                                    onClick={() => removeFromCart(item.product.id)}
+                                    className="w-5 h-5 rounded flex items-center justify-center ml-0.5"
+                                    style={{ 
+                                      backgroundColor: theme.colors.error + '10',
+                                      color: theme.colors.error
+                                    }}
+                                    whileHover={{ backgroundColor: theme.colors.error + '20' }}
+                                    whileTap={{ scale: 0.9 }}
+                                  >
+                                    <TrashIcon className="h-3 w-3" />
                                   </motion.button>
                                 </div>
-                                <span className="font-bold text-sm" style={{ color: theme.colors.primary }}>
-                                  ${item.subtotal.toFixed(2)}
-                                </span>
                               </div>
-
-                              <input
-                                type="text"
-                                placeholder="Notas..."
-                                value={item.notes}
-                                onChange={(e) => updateCartItemNotes(item.product.id, e.target.value)}
-                                className="w-full mt-2 px-2 py-1 text-xs"
-                                style={{
-                                  backgroundColor: theme.colors.background,
-                                  borderColor: theme.colors.border,
-                                  color: theme.colors.text
-                                }}
-                              />
+                              
+                              {/* Campo de notas - más compacto */}
+                              {(item.notes || false) && (
+                                <input
+                                  type="text"
+                                  placeholder="Notas..."
+                                  value={item.notes}
+                                  onChange={(e) => updateCartItemNotes(item.product.id, e.target.value)}
+                                  className="w-full mt-0.5 px-1.5 py-0.5 text-[10px] rounded border"
+                                  style={{
+                                    backgroundColor: theme.colors.background,
+                                    borderColor: theme.colors.border,
+                                    color: theme.colors.text
+                                  }}
+                                />
+                              )}
                             </motion.div>
                           ))}
                         </AnimatePresence>
-                      </div>
+                              </div>
+                              
+                              {/* Resumen del total - más compacto */}
+                              <div className="border-t p-2" style={{ borderColor: theme.colors.border }}>
+                                <div className="flex justify-between mb-1">
+                                  <span className="text-xs" style={{ color: theme.colors.textMuted }}>Subtotal</span>
+                                  <span className="text-xs font-medium" style={{ color: theme.colors.text }}>${cartSubtotal.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between mb-1">
+                                  <span className="text-xs" style={{ color: theme.colors.textMuted }}>IVA 21%</span>
+                                  <span className="text-xs font-medium" style={{ color: theme.colors.text }}>${cartTax.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between pt-1 border-t" style={{ borderColor: theme.colors.border }}>
+                                  <span className="text-sm font-bold" style={{ color: theme.colors.text }}>Total</span>
+                                  <span className="text-base font-bold" style={{ color: theme.colors.primary }}>${cartTotal.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                  )}
 
-                      {/* Botón único con toda la información */}
+                  {/* Botón de Procesar Orden - Compacto y responsive */}
+                  {cart.length > 0 && (
+                    <motion.div className="p-2">
                       <motion.button
-                        onClick={submitOrder}
-                        className="w-full p-3 text-white font-bold rounded-lg relative"
-                        style={{
-                          backgroundColor: theme.colors.primary,
-                          flexShrink: 0,
-                          minHeight: '80px'
+                        onClick={() => {
+                          // Toggle entre cart y payment
+                          if (activeSection === 'cart') {
+                            setActiveSection('payment');
+                            setPaymentOpen(true);
+                          } else {
+                            setActiveSection('cart');
+                            setPaymentOpen(false);
+                          }
                         }}
-                        whileHover={{ scale: 1.02, backgroundColor: theme.colors.primaryDark }}
-                        whileTap={{ scale: 0.98 }}
+                        className="w-full py-2 px-3 text-white font-semibold rounded-lg shadow transition-all"
+                        style={{
+                          background: activeSection === 'payment' || activeSection === 'cash' 
+                            ? theme.colors.success
+                            : theme.colors.primary,
+                        }}
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.99 }}
                       >
                         <div className="flex items-center justify-between">
-                          {/* Impuestos a la izquierda */}
+                          {/* Info compacta a la izquierda */}
                           <div className="text-left">
-                            <div className="text-xs opacity-80">Subtotal: ${cartSubtotal.toFixed(2)}</div>
-                            <div className="text-xs opacity-80">IVA 21%: ${cartTax.toFixed(2)}</div>
+                            <div className="text-[10px] opacity-90">Sub: ${cartSubtotal.toFixed(2)}</div>
+                            <div className="text-[10px] opacity-90">IVA: ${cartTax.toFixed(2)}</div>
                           </div>
 
-                          {/* Total centrado grande */}
+                          {/* Total y acción */}
                           <div className="text-center flex-1">
-                            <div className="text-3xl font-bold">${cartTotal.toFixed(2)}</div>
-                            <div className="text-xs opacity-90 flex items-center justify-center gap-1">
-                              <ShoppingCartIcon className="h-4 w-4" />
-                              PROCESAR
+                            <div className="text-lg font-bold">${cartTotal.toFixed(2)}</div>
+                            <div className="text-[10px] opacity-95 flex items-center justify-center gap-1">
+                              {activeCartTab === 'payment' ? (
+                                <>
+                                  <ChevronUpIcon className="h-3 w-3" />
+                                  <span>SELECCIONAR PAGO</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCardIcon className="h-3 w-3" />
+                                  <span>PROCESAR ORDEN</span>
+                                </>
+                              )}
                             </div>
                           </div>
 
-                          {/* Ícono a la derecha */}
-                          <div>
-                            <CreditCardIcon className="h-8 w-8 opacity-90" />
-                          </div>
+                          {/* Ícono pequeño */}
+                          <motion.div
+                            animate={{ rotate: activeCartTab === 'payment' ? 180 : 0 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <ChevronDownIcon className="h-5 w-5 opacity-90" />
+                          </motion.div>
                         </div>
                       </motion.button>
-                    </>
+                    </motion.div>
+                  )}
+
+                  {/* Sección 2: Método de Pago - Se expande cuando activeCartTab === 'payment' */}
+                  {cart.length > 0 && (
+                    <motion.div
+                      initial={false}
+                      animate={{ height: activeCartTab === 'payment' ? 'auto' : 0 }}
+                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      style={{ overflow: 'hidden' }}
+                      className="border-b"
+                    >
+                      <div className="p-4">
+                        <h3 className="text-sm font-medium mb-4 text-gray-600">
+                          Seleccione el método de pago:
+                        </h3>
+                        <div className="space-y-3">
+                                <motion.button
+                                  className="w-full p-4 rounded-lg border-2 flex items-center justify-between hover:border-green-500 transition-colors"
+                                  style={{ 
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border
+                                  }}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => {
+                                    // Colapsar payment y abrir cash
+                                    setActiveSection('cash');
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-2xl">💵</span>
+                                    <span className="font-medium">Efectivo</span>
+                                  </div>
+                                  <ChevronRightIcon className="h-5 w-5" style={{ color: theme.colors.textMuted }} />
+                                </motion.button>
+
+                                <motion.button
+                                  className="w-full p-4 rounded-lg border-2 flex items-center justify-between hover:border-blue-500 transition-colors"
+                                  style={{ 
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border
+                                  }}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => {
+                                    toast.success('Tarjeta de crédito seleccionada');
+                                    submitOrder();
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-2xl">💳</span>
+                                    <span className="font-medium">Tarjeta de Crédito</span>
+                                  </div>
+                                  <ChevronRightIcon className="h-5 w-5" style={{ color: theme.colors.textMuted }} />
+                                </motion.button>
+
+                                <motion.button
+                                  className="w-full p-4 rounded-lg border-2 flex items-center justify-between hover:border-purple-500 transition-colors"
+                                  style={{ 
+                                    backgroundColor: theme.colors.surface,
+                                    borderColor: theme.colors.border
+                                  }}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={async () => {
+                                    try {
+                                      // Primero crear la orden
+                                      toast.info('Creando orden...');
+                                      const orderData = await submitOrder();
+                                      
+                                      if (!orderData || !orderData.id) {
+                                        toast.error('Error creando la orden');
+                                        return;
+                                      }
+                                      
+                                      // Crear preferencia de pago en MercadoPago
+                                      toast.info('Preparando MercadoPago...');
+                                      const { API_URL } = await import('../config/api.config');
+                                      
+                                      const paymentData = {
+                                        order_id: orderData.id,
+                                        items: cart.map(item => ({
+                                          id: item.product.id,
+                                          name: item.product.name,
+                                          price: item.product.price,
+                                          quantity: item.quantity,
+                                          description: item.product.description || ''
+                                        })),
+                                        total: cartTotal,
+                                        table_number: selectedTable?.number || 1,
+                                        customer_name: selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : 'Cliente',
+                                        customer_email: selectedCustomer?.email || 'cliente@restaurant.com'
+                                      };
+                                      
+                                      const response = await fetch(`${API_URL}/api/payment/create-preference`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(paymentData)
+                                      });
+                                      
+                                      const result = await response.json();
+                                      
+                                      if (result.success && result.init_point) {
+                                        // Guardar datos antes de redirigir
+                                        localStorage.setItem('pendingOrder', JSON.stringify({
+                                          orderId: orderData.id,
+                                          cleared: false
+                                        }));
+                                        
+                                        // Redirigir a MercadoPago
+                                        toast.success('🧪 MODO PRUEBA: Pagando solo $1.00');
+                                        toast.info('Redirigiendo a MercadoPago...', { autoClose: 2000 });
+                                        
+                                        // Limpiar carrito antes de ir a MercadoPago
+                                        setCart([]);
+                                        setSelectedTable(null);
+                                        setSelectedCustomer(null);
+                                        setSelectedAddress(null);
+                                        setOrderNumber(prev => prev + 1);
+                                        
+                                        // Con credenciales APP_USR usar init_point (producción)
+                                        // Con credenciales TEST usar sandbox_init_point
+                                        setTimeout(() => {
+                                          // Preferir init_point para credenciales de producción APP_USR
+                                          window.location.href = result.init_point || result.sandbox_init_point;
+                                        }, 1000);
+                                      } else {
+                                        toast.error(result.error || 'Error al conectar con MercadoPago');
+                                      }
+                                    } catch (error) {
+                                      console.error('Error:', error);
+                                      toast.error('Error procesando el pago');
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-2xl">📱</span>
+                                    <span className="font-medium">MercadoPago</span>
+                                  </div>
+                                  <ChevronRightIcon className="h-5 w-5" style={{ color: theme.colors.textMuted }} />
+                                </motion.button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Sección 3: Pago en Efectivo */}
+                  {activeSection === 'cash' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="mt-3 space-y-3"
+                    >
+                      <div 
+                        className="p-3 rounded-xl border-2" 
+                        style={{ 
+                          backgroundColor: `${theme.colors.surface}40`,
+                          borderColor: theme.colors.border
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-medium" style={{ color: theme.colors.text }}>
+                            Pago en Efectivo
+                          </span>
+                          <span className="text-xs" style={{ color: theme.colors.textMuted }}>
+                            La orden se marcará como pendiente de pago
+                          </span>
+                        </div>
+                        
+                        <motion.button
+                          className="w-full px-4 py-3 rounded-xl border-2 flex items-center justify-between transition-all"
+                          style={{ 
+                            backgroundColor: theme.colors.primary,
+                            borderColor: theme.colors.primary
+                          }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={async () => {
+                            try {
+                              // Crear la orden con estado pendiente
+                              toast.info('Procesando orden...');
+                              const orderData = await submitOrder();
+                              
+                              if (!orderData || !orderData.id) {
+                                toast.error('Error creando la orden');
+                                return;
+                              }
+                              
+                              // Marcar la orden como pago en efectivo
+                              const { API_URL } = await import('../config/api.config');
+                              const response = await fetch(`${API_URL}/api/orders/${orderData.id}/payment`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  payment_method: 'cash',
+                                  status: 'pending'
+                                })
+                              });
+                              
+                              if (response.ok) {
+                                toast.success(`✅ Orden #${orderData.id} creada - Pendiente de pago en efectivo`);
+                                
+                                // Limpiar carrito y resetear estado
+                                setCart([]);
+                                setSelectedTable(null);
+                                setSelectedCustomer(null);
+                                setSelectedAddress(null);
+                                setOrderNumber(prev => prev + 1);
+                                setActiveSection('cart');
+                                setPaymentOpen(false);
+                                
+                                // Notificar a la cocina mediante WebSocket si está disponible
+                                if (window.kitchenSocket && window.kitchenSocket.readyState === WebSocket.OPEN) {
+                                  window.kitchenSocket.send(JSON.stringify({
+                                    type: 'new_order',
+                                    order: {
+                                      ...orderData,
+                                      payment_method: 'cash',
+                                      payment_status: 'pending'
+                                    }
+                                  }));
+                                }
+                                
+                                // Refrescar las órdenes en el panel superior
+                                if (window.refreshOrders) {
+                                  window.refreshOrders();
+                                }
+                              } else {
+                                toast.error('Error procesando el pago');
+                              }
+                            } catch (error) {
+                              console.error('Error:', error);
+                              toast.error('Error procesando la orden');
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">✅</span>
+                            <span className="font-medium text-white">Finalizar Orden</span>
+                          </div>
+                          <ChevronRightIcon className="h-5 w-5 text-white" />
+                        </motion.button>
+                        
+                        <div className="mt-3 p-2 rounded-lg" style={{ backgroundColor: `${theme.colors.warning}20` }}>
+                          <p className="text-xs" style={{ color: theme.colors.warning }}>
+                            ⚠️ El cliente deberá pagar en caja antes de recibir su pedido
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
                   )}
                 </GlassPanel>
               </div>

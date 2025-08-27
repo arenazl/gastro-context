@@ -13,6 +13,7 @@ import ssl
 import os
 import mimetypes
 import time
+from datetime import datetime, date
 import logging
 import traceback
 from datetime import datetime
@@ -27,7 +28,13 @@ try:
 except ImportError:
     print("ℹ️ python-dotenv no instalado, usando variables de entorno del sistema")
 # from crash_diagnostics import CrashDiagnostics
-# from mercadopago_config import create_payment_preference, process_webhook
+try:
+    from scripts.mercadopago_config import create_payment_preference, process_webhook, get_payment_status
+    MERCADOPAGO_AVAILABLE = True
+    print("✅ MercadoPago configurado")
+except ImportError as e:
+    MERCADOPAGO_AVAILABLE = False
+    print(f"⚠️ MercadoPago no disponible: {e}")
 # import google.generativeai as genai  # Se importa condicionalmente más abajo
 
 # Usar puerto de Heroku si está disponible, sino usar 9002 para desarrollo local
@@ -940,6 +947,8 @@ class DecimalEncoder(json.JSONEncoder):
             return float(obj)
         if isinstance(obj, datetime):
             return obj.isoformat()
+        if isinstance(obj, date):
+            return obj.isoformat()
         return super().default(obj)
 
 def get_cached_or_fetch(cache_key, fetch_func, *args):
@@ -972,13 +981,15 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed_path.path
         query = parse_qs(parsed_path.query)
         
+        
         # Servir imágenes estáticas
         if path.startswith('/static/products/'):
             self.serve_static_file(path)
             return
             
+            
         # Health check
-        if path == '/health' or path == '/api/health':
+        elif path == '/health' or path == '/api/health':
             self.send_json_response({
                 'name': 'Restaurant Management System',
                 'version': '2.0.0',
@@ -1167,6 +1178,69 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error_response(503, f"Error de base de datos: {str(e)}")
             
+        # Todas las URLs de imágenes para precarga
+        elif path == '/api/products/image-urls':
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor()
+                
+                # Obtener todas las URLs de imágenes de productos disponibles
+                cursor.execute("""
+                    SELECT DISTINCT image_url 
+                    FROM products 
+                    WHERE available = 1 AND image_url IS NOT NULL AND image_url != ''
+                    ORDER BY image_url
+                """)
+                
+                rows = cursor.fetchall()
+                image_urls = [row[0] for row in rows if row[0]]  # Filtrar URLs vacías
+                
+                self.send_json_response({
+                    'image_urls': image_urls,
+                    'count': len(image_urls)
+                })
+                
+            except Exception as e:
+                print(f"Error obteniendo URLs de imágenes: {str(e)}")
+                self.send_error_response(500, str(e))
+            finally:
+                if cursor:
+                    cursor.close()
+                if connection:
+                    connection.close()
+        
+        # Proxy para imágenes - soluciona problemas CORS
+        elif self.path.startswith('/api/proxy-image?url='):
+            try:
+                import urllib.parse
+                import requests
+                
+                # Extraer URL de la query string
+                url_param = self.path.split('?url=')[1]
+                image_url = urllib.parse.unquote(url_param)
+                
+                
+                # Hacer request a la imagen
+                response = requests.get(image_url, stream=True, timeout=10)
+                
+                if response.status_code == 200:
+                    # Enviar headers apropiados
+                    self.send_response(200)
+                    self.send_header('Content-Type', response.headers.get('Content-Type', 'image/jpeg'))
+                    # Access-Control-Allow-Origin ya se envía en end_headers()
+                    self.send_header('Cache-Control', 'max-age=86400')  # Cache 24 horas
+                    self.end_headers()
+                    
+                    # Enviar contenido de la imagen
+                    for chunk in response.iter_content(chunk_size=8192):
+                        self.wfile.write(chunk)
+                else:
+                    self.send_error(response.status_code)
+                    
+            except Exception as e:
+                print(f"Error en proxy de imagen: {str(e)}")
+                self.send_error(500)
+        
         # Producto individual
         elif path.startswith('/api/products/') and path != '/api/products/upload':
             try:
@@ -1183,6 +1257,56 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/tables':
             tables = get_cached_or_fetch('tables', self.get_tables_data)
             self.send_json_response(tables)
+            
+        # Órdenes activas para el panel superior
+        elif path == '/api/orders/active':
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor()
+                
+                query = """
+                SELECT o.id, o.table_number, o.customer_id, o.status, 
+                       o.payment_status, o.subtotal, o.tax, o.total,
+                       o.created_at, 
+                       TIMESTAMPDIFF(MINUTE, o.created_at, NOW()) as time_in_kitchen,
+                       u.first_name as waiter
+                FROM orders o
+                LEFT JOIN users u ON o.waiter_id = u.id
+                WHERE o.status IN ('pending', 'preparing', 'ready')
+                ORDER BY o.created_at DESC
+                LIMIT 20
+                """
+                
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                orders = []
+                for row in rows:
+                    orders.append({
+                        'id': row[0],
+                        'table_number': row[1],
+                        'customer_id': row[2],
+                        'status': row[3],
+                        'payment_status': row[4],
+                        'payment_method': 'cash',  # Default por ahora
+                        'subtotal': float(row[5]) if row[5] else 0,
+                        'tax': float(row[6]) if row[6] else 0,
+                        'total': float(row[7]) if row[7] else 0,
+                        'created_at': row[8].isoformat() if row[8] else None,
+                        'time_in_kitchen': row[9] or 0,
+                        'waiter': row[10]
+                    })
+                
+                self.send_json_response(orders)
+                
+            except Exception as e:
+                print(f"Error obteniendo órdenes activas: {str(e)}")
+                self.send_error_response(500, str(e))
+            finally:
+                if cursor:
+                    cursor.close()
+                if connection:
+                    connection.close()
             
         # Todas las órdenes
         elif path == '/api/orders':
@@ -1559,6 +1683,378 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 logger.error(f"Error analizando estructura de BD: {e}")
                 self.send_error_response(500, str(e))
         
+        # ============================================================
+        # MÓDULO DE EMPLEADOS - ENDPOINTS GET
+        # ============================================================
+        
+        # Obtener todos los empleados
+        elif path == '/api/employees':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                query = """
+                    SELECT 
+                        e.id, e.employee_number, e.first_name, e.last_name, e.dni, 
+                        e.cuil, e.email, e.phone, e.address, e.birth_date,
+                        e.hire_date, e.current_salary, e.salary_type, e.employment_status,
+                        e.notes, e.is_active, e.last_login,
+                        d.name as department_name,
+                        r.name as role_name,
+                        CONCAT(sup.first_name, ' ', sup.last_name) as supervisor_name,
+                        DATEDIFF(CURDATE(), e.hire_date) as days_employed
+                    FROM employees e
+                    JOIN departments d ON e.department_id = d.id
+                    JOIN employee_roles r ON e.role_id = r.id
+                    LEFT JOIN employees sup ON e.supervisor_id = sup.id
+                    WHERE e.is_active = TRUE
+                    ORDER BY e.last_name, e.first_name
+                """
+                cursor.execute(query)
+                employees = cursor.fetchall()
+                
+                self.send_json_response(employees)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo empleados: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+                
+        # Obtener empleado específico
+        elif path.startswith('/api/employees/') and path != '/api/employees':
+            connection = None
+            cursor = None
+            try:
+                employee_id = int(path.split('/')[-1])
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                query = """
+                    SELECT 
+                        e.*, d.name as department_name, r.name as role_name,
+                        CONCAT(sup.first_name, ' ', sup.last_name) as supervisor_name,
+                        DATEDIFF(CURDATE(), e.hire_date) as days_employed
+                    FROM employees e
+                    JOIN departments d ON e.department_id = d.id
+                    JOIN employee_roles r ON e.role_id = r.id
+                    LEFT JOIN employees sup ON e.supervisor_id = sup.id
+                    WHERE e.id = %s
+                """
+                cursor.execute(query, (employee_id,))
+                employee = cursor.fetchone()
+                
+                if employee:
+                    self.send_json_response(employee)
+                else:
+                    self.send_error_response(404, "Empleado no encontrado")
+                
+            except ValueError:
+                self.send_error_response(400, "ID de empleado inválido")
+            except Exception as e:
+                logger.error(f"Error obteniendo empleado: {e}")
+                self.send_error_response(500, str(e))
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # Obtener todos los departamentos
+        elif path == '/api/departments':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                query = """
+                    SELECT 
+                        d.*, 
+                        CONCAT(m.first_name, ' ', m.last_name) as manager_name,
+                        COUNT(e.id) as employee_count
+                    FROM departments d
+                    LEFT JOIN employees m ON d.manager_id = m.id
+                    LEFT JOIN employees e ON d.id = e.department_id AND e.is_active = TRUE
+                    WHERE d.is_active = TRUE
+                    GROUP BY d.id
+                    ORDER BY d.name
+                """
+                cursor.execute(query)
+                departments = cursor.fetchall()
+                
+                self.send_json_response(departments)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo departamentos: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # Obtener roles por departamento
+        elif path == '/api/employee-roles':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                department_id = None
+                query_params = urlparse(self.path).query
+                if query_params:
+                    params = parse_qs(query_params)
+                    if 'department_id' in params:
+                        department_id = int(params['department_id'][0])
+                
+                if department_id:
+                    query = """
+                        SELECT r.*, d.name as department_name
+                        FROM employee_roles r
+                        JOIN departments d ON r.department_id = d.id
+                        WHERE r.department_id = %s AND r.is_active = TRUE
+                        ORDER BY r.name
+                    """
+                    cursor.execute(query, (department_id,))
+                else:
+                    query = """
+                        SELECT r.*, d.name as department_name
+                        FROM employee_roles r
+                        JOIN departments d ON r.department_id = d.id
+                        WHERE r.is_active = TRUE
+                        ORDER BY d.name, r.name
+                    """
+                    cursor.execute(query)
+                
+                roles = cursor.fetchall()
+                self.send_json_response(roles)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo roles: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # Obtener permisos de un usuario específico
+        elif path.startswith('/api/users/') and '/permissions' in path:
+            connection = None
+            cursor = None
+            try:
+                user_id = int(path.split('/')[-2])
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                query = """
+                    SELECT 
+                        r.can_take_orders,
+                        r.can_process_payments,
+                        r.can_access_kitchen,
+                        r.can_manage_inventory,
+                        r.can_view_reports,
+                        r.can_manage_employees,
+                        r.can_manage_suppliers,
+                        r.is_admin,
+                        d.name as department_name,
+                        r.name as role_name
+                    FROM employees e
+                    JOIN employee_roles r ON e.role_id = r.id
+                    JOIN departments d ON e.department_id = d.id
+                    WHERE e.user_id = %s AND e.is_active = TRUE
+                """
+                cursor.execute(query, (user_id,))
+                permissions = cursor.fetchone()
+                
+                if permissions:
+                    self.send_json_response(permissions)
+                else:
+                    self.send_json_response({
+                        'can_take_orders': False,
+                        'can_process_payments': False,
+                        'can_access_kitchen': False,
+                        'can_manage_inventory': False,
+                        'can_view_reports': False,
+                        'can_manage_employees': False,
+                        'can_manage_suppliers': False,
+                        'is_admin': False,
+                        'department_name': None,
+                        'role_name': None
+                    })
+                
+            except ValueError:
+                self.send_error_response(400, "ID de usuario inválido")
+            except Exception as e:
+                logger.error(f"Error obteniendo permisos: {e}")
+                self.send_error_response(500, str(e))
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # === ENDPOINTS DE INGREDIENTES ===
+        
+        # Obtener todas las categorías de ingredientes
+        elif path == '/api/ingredients/categories':
+            try:
+                query = """
+                SELECT id, name, description, color, icon, sort_order, is_active
+                FROM ingredient_categories
+                WHERE is_active = TRUE
+                ORDER BY sort_order, name
+                """
+                categories = execute_mysql_query_with_recovery(query)
+                self.send_json_response(categories or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo categorías de ingredientes: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Obtener todas las unidades de medida
+        elif path == '/api/ingredients/units':
+            try:
+                query = """
+                SELECT id, name, abbreviation, unit_type, base_conversion_factor, is_active
+                FROM measurement_units
+                WHERE is_active = TRUE
+                ORDER BY unit_type, name
+                """
+                units = execute_mysql_query_with_recovery(query)
+                self.send_json_response(units or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo unidades de medida: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Obtener todos los alergenos
+        elif path == '/api/ingredients/allergens':
+            try:
+                query = """
+                SELECT id, name, description, icon, color, is_active
+                FROM allergens
+                WHERE is_active = TRUE
+                ORDER BY name
+                """
+                allergens = execute_mysql_query_with_recovery(query)
+                self.send_json_response(allergens or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo alérgenos: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Obtener todos los ingredientes con información completa
+        elif path == '/api/ingredients':
+            try:
+                query = """
+                SELECT * FROM v_ingredients_summary
+                ORDER BY category_name, name
+                """
+                ingredients = execute_mysql_query_with_recovery(query)
+                self.send_json_response(ingredients or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo ingredientes: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Buscar ingredientes por nombre
+        elif path == '/api/ingredients/search':
+            try:
+                parsed_url = urlparse(self.path)
+                query_params = parse_qs(parsed_url.query)
+                search_term = query_params.get('q', [''])[0].strip()
+                
+                if not search_term:
+                    self.send_json_response([])
+                    return
+                
+                query = """
+                SELECT * FROM v_ingredients_summary 
+                WHERE name LIKE %s OR description LIKE %s
+                ORDER BY 
+                    CASE WHEN name LIKE %s THEN 1 ELSE 2 END,
+                    name
+                LIMIT 20
+                """
+                search_pattern = f"%{search_term}%"
+                exact_pattern = f"{search_term}%"
+                
+                results = execute_mysql_query_with_recovery(query, (search_pattern, search_pattern, exact_pattern))
+                self.send_json_response(results or [])
+            except Exception as e:
+                logger.error(f"Error buscando ingredientes: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Obtener ingredientes de un producto específico
+        elif path.startswith('/api/products/') and path.endswith('/ingredients'):
+            try:
+                # Extraer product_id de la URL: /api/products/{id}/ingredients
+                product_id = path.split('/')[-2]
+                
+                query = """
+                SELECT 
+                    pi.id,
+                    pi.ingredient_id,
+                    i.name as ingredient_name,
+                    pi.quantity,
+                    pi.unit_name,
+                    mu.abbreviation as unit_abbr,
+                    pi.preparation_notes,
+                    pi.cost_contribution,
+                    pi.is_optional,
+                    ic.name as category_name,
+                    ic.color as category_color
+                FROM product_ingredients pi
+                JOIN ingredients i ON pi.ingredient_id = i.id
+                LEFT JOIN measurement_units mu ON i.unit_id = mu.id
+                LEFT JOIN ingredient_categories ic ON i.category_id = ic.id
+                WHERE pi.product_id = %s AND pi.is_active = TRUE
+                ORDER BY ic.sort_order, i.name
+                """
+                
+                ingredients = execute_mysql_query_with_recovery(query, (product_id,))
+                self.send_json_response(ingredients or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo ingredientes del producto: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Sugerencias de IA para ingredientes basadas en nombre de producto
+        elif path == '/api/ingredients/ai-suggestions':
+            try:
+                parsed_url = urlparse(self.path)
+                query_params = parse_qs(parsed_url.query)
+                product_name = query_params.get('product_name', [''])[0].strip()
+                product_category = query_params.get('category', [''])[0].strip()
+                
+                if not product_name:
+                    self.send_error_response(400, "Nombre del producto es requerido")
+                    return
+                
+                # Verificar si Gemini está disponible
+                if not GEMINI_AVAILABLE:
+                    self.send_error_response(503, "Servicio de IA no disponible")
+                    return
+                
+                suggestions = self.get_ai_ingredient_suggestions(product_name, product_category)
+                self.send_json_response(suggestions)
+            except Exception as e:
+                logger.error(f"Error obteniendo sugerencias de IA: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Obtener stock crítico
+        elif path == '/api/ingredients/critical-stock':
+            try:
+                query = "SELECT * FROM v_critical_stock ORDER BY urgency_level DESC, current_stock ASC"
+                critical_stock = execute_mysql_query_with_recovery(query)
+                self.send_json_response(critical_stock or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo stock crítico: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Obtener costos de ingredientes por producto
+        elif path == '/api/ingredients/product-costs':
+            try:
+                query = "SELECT * FROM v_product_ingredients_cost ORDER BY total_ingredient_cost DESC"
+                costs = execute_mysql_query_with_recovery(query)
+                self.send_json_response(costs or [])
+            except Exception as e:
+                logger.error(f"Error obteniendo costos por producto: {e}")
+                self.send_error_response(500, str(e))
+        
         else:
             # Servir archivos estáticos del frontend
             self.serve_frontend(path)
@@ -1615,6 +2111,204 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error_response(500, str(e))
         
+        # Actualizar método de pago de una orden
+        elif path.startswith('/api/orders/') and path.endswith('/payment'):
+            order_id = path.split('/')[3]
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                payment_method = data.get('payment_method', 'cash')
+                payment_status = data.get('status', 'pending')
+                
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor()
+                
+                # Actualizar el método y estado de pago
+                update_query = """
+                    UPDATE orders 
+                    SET payment_method = %s, payment_status = %s
+                    WHERE id = %s
+                """
+                cursor.execute(update_query, (payment_method, payment_status, order_id))
+                connection.commit()
+                
+                # Registrar en el sistema
+                print(f"💵 Orden #{order_id} actualizada: Pago {payment_method} - {payment_status}")
+                
+                self.send_json_response({
+                    'success': True,
+                    'order_id': order_id,
+                    'payment_method': payment_method,
+                    'payment_status': payment_status
+                })
+                
+            except Exception as e:
+                print(f"Error actualizando pago de orden: {str(e)}")
+                if connection:
+                    connection.rollback()
+                self.send_error_response(500, str(e))
+            finally:
+                if cursor:
+                    cursor.close()
+                if connection:
+                    connection.close()
+        
+        # === ENDPOINTS POST DE INGREDIENTES ===
+        
+        # Crear nuevo ingrediente
+        elif path == '/api/ingredients':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = """
+                    INSERT INTO ingredients (
+                        name, description, category_id, unit_id, 
+                        calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g,
+                        cost_per_unit, current_stock, minimum_stock,
+                        is_perishable, storage_temperature, shelf_life_days,
+                        supplier, is_vegetarian, is_vegan, is_gluten_free, is_active
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    """
+                    
+                    values = (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('category_id'),
+                        data.get('unit_id'),
+                        data.get('calories_per_100g', 0),
+                        data.get('protein_per_100g', 0),
+                        data.get('carbs_per_100g', 0),
+                        data.get('fat_per_100g', 0),
+                        data.get('fiber_per_100g', 0),
+                        data.get('cost_per_unit', 0),
+                        data.get('current_stock', 0),
+                        data.get('minimum_stock', 0),
+                        data.get('is_perishable', False),
+                        data.get('storage_temperature', 'room_temperature'),
+                        data.get('shelf_life_days', 30),
+                        data.get('supplier', ''),
+                        data.get('is_vegetarian', False),
+                        data.get('is_vegan', False),
+                        data.get('is_gluten_free', False),
+                        data.get('is_active', True)
+                    )
+                    
+                    cursor.execute(query, values)
+                    connection.commit()
+                    
+                    ingredient_id = cursor.lastrowid
+                    
+                    # Agregar alérgenos si se proporcionan
+                    if data.get('allergen_ids'):
+                        for allergen_id in data['allergen_ids']:
+                            allergen_query = """
+                            INSERT INTO ingredient_allergens (ingredient_id, allergen_id)
+                            VALUES (%s, %s)
+                            """
+                            cursor.execute(allergen_query, (ingredient_id, allergen_id))
+                        connection.commit()
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'id': ingredient_id,
+                        'message': 'Ingrediente creado exitosamente'
+                    })
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    raise e
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Error creando ingrediente: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Agregar ingrediente a producto específico
+        elif path.startswith('/api/products/') and path.endswith('/ingredients'):
+            try:
+                # Extraer product_id de la URL: /api/products/{id}/ingredients
+                product_id = path.split('/')[-2]
+                
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Verificar si ya existe la relación
+                    check_query = """
+                    SELECT id FROM product_ingredients 
+                    WHERE product_id = %s AND ingredient_id = %s
+                    """
+                    cursor.execute(check_query, (product_id, data.get('ingredient_id')))
+                    existing = cursor.fetchone()
+                    
+                    if existing:
+                        self.send_error_response(409, "El ingrediente ya está asignado a este producto")
+                        return
+                    
+                    # Insertar nueva relación producto-ingrediente
+                    query = """
+                    INSERT INTO product_ingredients (
+                        product_id, ingredient_id, quantity, unit_id, unit_name,
+                        preparation_notes, cost_contribution, is_optional, is_active
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    
+                    values = (
+                        product_id,
+                        data.get('ingredient_id'),
+                        data.get('quantity', 0),
+                        data.get('unit_id', 1),
+                        data.get('unit_name', ''),
+                        data.get('preparation_notes', ''),
+                        data.get('cost_contribution', 0),
+                        data.get('is_optional', False),
+                        True
+                    )
+                    
+                    cursor.execute(query, values)
+                    connection.commit()
+                    
+                    relation_id = cursor.lastrowid
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'id': relation_id,
+                        'message': 'Ingrediente agregado al producto exitosamente'
+                    })
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    raise e
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Error agregando ingrediente a producto: {e}")
+                self.send_error_response(500, str(e))
+        
         elif path == '/api/kitchen/queue':
             # Crear nuevo item en la cola de cocina
             content_length = int(self.headers.get('Content-Length', 0))
@@ -1633,23 +2327,61 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         
         elif path == '/api/payment/create-preference':
             # Crear preferencia de pago con MercadoPago
+            if not MERCADOPAGO_AVAILABLE:
+                self.send_error_response(503, "MercadoPago no está configurado. Configure las credenciales en el servidor.")
+                return
+                
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             
             try:
                 data = json.loads(post_data)
-                logger.info(f"Creando preferencia de pago para orden: {data.get('order_id')}")
+                print(f"💳 Creando preferencia de pago para orden: {data.get('order_id')}")
                 
                 # Crear preferencia en MercadoPago
                 preference_result = create_payment_preference(data)
                 
                 if preference_result['success']:
+                    print(f"✅ Preferencia creada: {preference_result.get('preference_id')}")
                     self.send_json_response(preference_result)
                 else:
+                    print(f"❌ Error: {preference_result.get('error')}")
                     self.send_error_response(400, preference_result.get('error', 'Error creando preferencia'))
             except Exception as e:
-                logger.error(f"Error creando preferencia de pago: {str(e)}")
+                print(f"❌ Error creando preferencia de pago: {str(e)}")
                 self.send_error_response(500, str(e))
+        
+        elif path == '/api/webhooks/mercadopago':
+            # Procesar webhook de MercadoPago
+            if not MERCADOPAGO_AVAILABLE:
+                self.send_response(200)
+                self.end_headers()
+                return
+                
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                print(f"🔔 Webhook recibido de MercadoPago: {data.get('type')}")
+                
+                # Procesar el webhook
+                result = process_webhook(data)
+                
+                if result:
+                    # Actualizar el estado de la orden en la base de datos
+                    if result.get('status') == 'approved':
+                        order_id = result.get('external_reference')
+                        print(f"✅ Pago aprobado para orden #{order_id}")
+                        # TODO: Actualizar estado de pago en la BD
+                    
+                # Siempre responder 200 OK a MercadoPago
+                self.send_response(200)
+                self.end_headers()
+            except Exception as e:
+                print(f"❌ Error procesando webhook: {str(e)}")
+                self.send_response(200)
+                self.end_headers()
         
         elif path == '/api/chat/menu-ai':
             # 🧠 SISTEMA DE CONTEXTO PERSISTENTE (como ChatGPT)
@@ -2229,6 +2961,285 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Error analizando estructura de BD: {e}")
                 self.send_error_response(500, str(e))
+        
+        # Crear nueva categoría
+        elif path == '/api/categories':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    query = """
+                        INSERT INTO categories (name, description, icon, color, is_active, sort_order)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('icon', 'utensils'),
+                        data.get('color', '#3B82F6'),
+                        data.get('is_active', True),
+                        data.get('sort_order', 0)
+                    ))
+                    connection.commit()
+                    
+                    new_id = cursor.lastrowid
+                    self.send_json_response({'id': new_id, **data})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando categoría: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Crear nueva subcategoría  
+        elif path == '/api/subcategories':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    query = """
+                        INSERT INTO subcategories (name, description, category_id, icon, is_active, sort_order)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('category_id'),
+                        data.get('icon', 'layers'),
+                        data.get('is_active', True),
+                        data.get('sort_order', 0)
+                    ))
+                    connection.commit()
+                    
+                    new_id = cursor.lastrowid
+                    self.send_json_response({'id': new_id, **data})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando subcategoría: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Crear nuevo producto
+        elif path == '/api/products':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    query = """
+                        INSERT INTO products (name, price, description, category_id, subcategory_id, available)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('price'),
+                        data.get('description', ''),
+                        data.get('category_id'),
+                        data.get('subcategory_id') if data.get('subcategory_id') != 'all' else None,
+                        data.get('available', True)
+                    ))
+                    connection.commit()
+                    
+                    new_id = cursor.lastrowid
+                    self.send_json_response({'id': new_id, **data})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando producto: {e}")
+                self.send_error_response(500, str(e))
+        
+        # ============================================================
+        # MÓDULO DE EMPLEADOS - ENDPOINTS POST
+        # ============================================================
+        
+        # Crear empleado
+        elif path == '/api/employees':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Generar número de empleado si no se proporciona
+                    if not data.get('employee_number'):
+                        cursor.execute("SELECT MAX(id) FROM employees")
+                        max_id = cursor.fetchone()[0] or 0
+                        data['employee_number'] = f"EMP{max_id + 1:04d}"
+                    
+                    query = """
+                        INSERT INTO employees (
+                            employee_number, first_name, last_name, dni, cuil,
+                            email, phone, address, birth_date, hire_date,
+                            department_id, role_id, supervisor_id, current_salary,
+                            salary_type, employment_status, notes
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s, %s
+                        )
+                    """
+                    cursor.execute(query, (
+                        data.get('employee_number'),
+                        data.get('first_name'),
+                        data.get('last_name'),
+                        data.get('dni'),
+                        data.get('cuil'),
+                        data.get('email'),
+                        data.get('phone'),
+                        data.get('address'),
+                        data.get('birth_date'),
+                        data.get('hire_date'),
+                        data.get('department_id'),
+                        data.get('role_id'),
+                        data.get('supervisor_id'),
+                        data.get('current_salary', 0.00),
+                        data.get('salary_type', 'monthly'),
+                        data.get('employment_status', 'active'),
+                        data.get('notes', '')
+                    ))
+                    connection.commit()
+                    
+                    new_id = cursor.lastrowid
+                    self.send_json_response({'id': new_id, **data})
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando empleado: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Crear departamento
+        elif path == '/api/departments':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = """
+                        INSERT INTO departments (
+                            name, description, manager_id, cost_center_code, is_active
+                        ) VALUES (%s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('manager_id'),
+                        data.get('cost_center_code'),
+                        data.get('is_active', True)
+                    ))
+                    connection.commit()
+                    
+                    new_id = cursor.lastrowid
+                    self.send_json_response({'id': new_id, **data})
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando departamento: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Crear rol de empleado
+        elif path == '/api/employee-roles':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = """
+                        INSERT INTO employee_roles (
+                            name, description, department_id, base_salary, hourly_rate,
+                            can_take_orders, can_process_payments, can_access_kitchen,
+                            can_manage_inventory, can_view_reports, can_manage_employees,
+                            can_manage_suppliers, is_admin, is_active
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('department_id'),
+                        data.get('base_salary', 0.00),
+                        data.get('hourly_rate', 0.00),
+                        data.get('can_take_orders', False),
+                        data.get('can_process_payments', False),
+                        data.get('can_access_kitchen', False),
+                        data.get('can_manage_inventory', False),
+                        data.get('can_view_reports', False),
+                        data.get('can_manage_employees', False),
+                        data.get('can_manage_suppliers', False),
+                        data.get('is_admin', False),
+                        data.get('is_active', True)
+                    ))
+                    connection.commit()
+                    
+                    new_id = cursor.lastrowid
+                    self.send_json_response({'id': new_id, **data})
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error creando rol: {e}")
+                self.send_error_response(500, str(e))
             
         else:
             self.send_error(404)
@@ -2253,6 +3264,80 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error_response(400, "JSON inválido")
             except Exception as e:
                 logger.error(f"Error actualizando cliente: {e}")
+                self.send_error_response(500, str(e))
+        
+        # === ENDPOINTS PUT DE INGREDIENTES ===
+        
+        # Actualizar ingrediente
+        elif path.startswith('/api/ingredients/') and path.count('/') == 3:
+            try:
+                ingredient_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Construir query dinámicamente solo con campos proporcionados
+                    update_fields = []
+                    values = []
+                    
+                    updateable_fields = {
+                        'name': 'name',
+                        'description': 'description',
+                        'category_id': 'category_id',
+                        'unit_id': 'unit_id',
+                        'cost_per_unit': 'cost_per_unit',
+                        'current_stock': 'current_stock',
+                        'minimum_stock': 'minimum_stock',
+                        'supplier': 'supplier',
+                        'is_active': 'is_active'
+                    }
+                    
+                    for field, db_field in updateable_fields.items():
+                        if field in data:
+                            update_fields.append(f"{db_field} = %s")
+                            values.append(data[field])
+                    
+                    if not update_fields:
+                        self.send_error_response(400, "No hay campos para actualizar")
+                        return
+                    
+                    update_fields.append("updated_at = NOW()")
+                    values.append(ingredient_id)
+                    
+                    query = f"""
+                    UPDATE ingredients 
+                    SET {', '.join(update_fields)}
+                    WHERE id = %s
+                    """
+                    
+                    cursor.execute(query, values)
+                    connection.commit()
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'message': 'Ingrediente actualizado exitosamente'
+                    })
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    raise e
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except ValueError:
+                self.send_error_response(400, "ID de ingrediente inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando ingrediente: {e}")
                 self.send_error_response(500, str(e))
                 
         # Update address
@@ -2361,6 +3446,233 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Error actualizando configuración de empresa: {e}")
                 self.send_error_response(500, str(e))
+        
+        # Actualizar categoría
+        elif path.startswith('/api/categories/'):
+            try:
+                category_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    query = """
+                        UPDATE categories 
+                        SET name = %s, description = %s, icon = %s, color = %s, is_active = %s, sort_order = %s
+                        WHERE id = %s
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('icon', 'utensils'),
+                        data.get('color', '#3B82F6'),
+                        data.get('is_active', True),
+                        data.get('sort_order', 0),
+                        category_id
+                    ))
+                    connection.commit()
+                    
+                    self.send_json_response({'id': category_id, **data})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando categoría: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Actualizar subcategoría
+        elif path.startswith('/api/subcategories/'):
+            try:
+                subcategory_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    query = """
+                        UPDATE subcategories 
+                        SET name = %s, description = %s, category_id = %s, icon = %s, is_active = %s, sort_order = %s
+                        WHERE id = %s
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('category_id'),
+                        data.get('icon', 'layers'),
+                        data.get('is_active', True),
+                        data.get('sort_order', 0),
+                        subcategory_id
+                    ))
+                    connection.commit()
+                    
+                    self.send_json_response({'id': subcategory_id, **data})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando subcategoría: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Actualizar producto
+        elif path.startswith('/api/products/'):
+            try:
+                product_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor(dictionary=True)
+                    
+                    query = """
+                        UPDATE products 
+                        SET name = %s, price = %s, description = %s, 
+                            category_id = %s, subcategory_id = %s, available = %s
+                        WHERE id = %s
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('price'),
+                        data.get('description', ''),
+                        data.get('category_id'),
+                        data.get('subcategory_id') if data.get('subcategory_id') != 'all' else None,
+                        data.get('available', True),
+                        product_id
+                    ))
+                    connection.commit()
+                    
+                    self.send_json_response({'id': product_id, **data})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando producto: {e}")
+                self.send_error_response(500, str(e))
+        
+        # ============================================================
+        # MÓDULO DE EMPLEADOS - ENDPOINTS CRUD
+        # ============================================================
+        
+        # Actualizar empleado
+        elif path.startswith('/api/employees/'):
+            try:
+                employee_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = """
+                        UPDATE employees SET
+                            first_name = %s, last_name = %s, dni = %s, cuil = %s,
+                            email = %s, phone = %s, address = %s, birth_date = %s,
+                            hire_date = %s, department_id = %s, role_id = %s,
+                            supervisor_id = %s, current_salary = %s, salary_type = %s,
+                            employment_status = %s, notes = %s
+                        WHERE id = %s
+                    """
+                    cursor.execute(query, (
+                        data.get('first_name'),
+                        data.get('last_name'),
+                        data.get('dni'),
+                        data.get('cuil'),
+                        data.get('email'),
+                        data.get('phone'),
+                        data.get('address'),
+                        data.get('birth_date'),
+                        data.get('hire_date'),
+                        data.get('department_id'),
+                        data.get('role_id'),
+                        data.get('supervisor_id'),
+                        data.get('current_salary', 0.00),
+                        data.get('salary_type', 'monthly'),
+                        data.get('employment_status', 'active'),
+                        data.get('notes', ''),
+                        employee_id
+                    ))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'employee_id': employee_id})
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando empleado: {e}")
+                self.send_error_response(500, str(e))
+
+        # Actualizar departamento
+        elif path.startswith('/api/departments/'):
+            try:
+                department_id = int(path.split('/')[-1])
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = """
+                        UPDATE departments SET
+                            name = %s, description = %s, manager_id = %s,
+                            cost_center_code = %s, is_active = %s
+                        WHERE id = %s
+                    """
+                    cursor.execute(query, (
+                        data.get('name'),
+                        data.get('description', ''),
+                        data.get('manager_id'),
+                        data.get('cost_center_code'),
+                        data.get('is_active', True),
+                        department_id
+                    ))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'department_id': department_id})
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando departamento: {e}")
+                self.send_error_response(500, str(e))
+        
         else:
             self.send_error(404)
     
@@ -2378,10 +3690,142 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 logger.error(f"Error eliminando dirección: {e}")
                 self.send_error_response(500, str(e))
                 
+        elif path.startswith('/api/categories/'):
+            # Delete category (soft delete)
+            try:
+                category_id = int(path.split('/')[-1])
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Soft delete: set is_active = 0
+                    query = "UPDATE categories SET is_active = 0 WHERE id = %s"
+                    cursor.execute(query, (category_id,))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'deleted': category_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando categoría: {e}")
+                self.send_error_response(500, str(e))
+        
+        elif path.startswith('/api/subcategories/'):
+            # Delete subcategory (soft delete)
+            try:
+                subcategory_id = int(path.split('/')[-1])
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Soft delete: set is_active = 0
+                    query = "UPDATE subcategories SET is_active = 0 WHERE id = %s"
+                    cursor.execute(query, (subcategory_id,))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'deleted': subcategory_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando subcategoría: {e}")
+                self.send_error_response(500, str(e))
+                
         elif path.startswith('/api/products/'):
-            # Delete product
-            product_id = path.split('/')[-1]
-            self.send_json_response({'success': True, 'deleted': product_id})
+            # Delete product (soft delete)
+            try:
+                product_id = int(path.split('/')[-1])
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Soft delete: set available = 0
+                    query = "UPDATE products SET available = 0 WHERE id = %s"
+                    cursor.execute(query, (product_id,))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'deleted': product_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando producto: {e}")
+                self.send_error_response(500, str(e))
+        
+        # ============================================================
+        # MÓDULO DE EMPLEADOS - ENDPOINTS DELETE
+        # ============================================================
+        
+        # Eliminar empleado (soft delete)
+        elif path.startswith('/api/employees/'):
+            try:
+                employee_id = int(path.split('/')[-1])
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Soft delete: set is_active = 0 and employment_status = 'terminated'
+                    query = """
+                        UPDATE employees 
+                        SET is_active = 0, employment_status = 'terminated',
+                            termination_date = CURDATE()
+                        WHERE id = %s
+                    """
+                    cursor.execute(query, (employee_id,))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'deleted': employee_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando empleado: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Eliminar departamento (soft delete)
+        elif path.startswith('/api/departments/'):
+            try:
+                department_id = int(path.split('/')[-1])
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Verificar que no tenga empleados activos
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM employees WHERE department_id = %s AND is_active = 1",
+                        (department_id,)
+                    )
+                    active_employees = cursor.fetchone()[0]
+                    
+                    if active_employees > 0:
+                        self.send_error_response(400, 
+                            f"No se puede eliminar el departamento. Tiene {active_employees} empleados activos.")
+                        return
+                    
+                    # Soft delete: set is_active = 0
+                    query = "UPDATE departments SET is_active = 0 WHERE id = %s"
+                    cursor.execute(query, (department_id,))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'deleted': department_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando departamento: {e}")
+                self.send_error_response(500, str(e))
+        
         else:
             self.send_error(404)
     
@@ -2389,7 +3833,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
     def get_categories_data(self):
         """Get categories from MySQL database ONLY"""
         query = """
-        SELECT id, name, icon, color, sort_order, is_active
+        SELECT id, name, description, icon, color, sort_order, is_active
         FROM categories 
         WHERE is_active = 1
         ORDER BY sort_order ASC, name ASC
@@ -2407,7 +3851,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         if not category_id:
             # Si no hay category_id, devolver TODAS las subcategorías activas
             query = """
-            SELECT id, name, category_id, sort_order, is_active, icon
+            SELECT id, name, description, category_id, sort_order, is_active, icon
             FROM subcategories 
             WHERE is_active = 1
             ORDER BY category_id, sort_order ASC, name ASC
@@ -2415,7 +3859,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             result = execute_mysql_query_with_recovery(query, None)
         else:
             query = """
-            SELECT id, name, category_id, sort_order, is_active, icon
+            SELECT id, name, description, category_id, sort_order, is_active, icon
             FROM subcategories 
             WHERE category_id = %s AND is_active = 1
             ORDER BY sort_order ASC, name ASC
@@ -2685,6 +4129,98 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         # NO FALLBACK - Si no hay BD, error
         raise Exception("No se puede acceder a la base de datos para obtener clientes")
     
+    def get_ai_ingredient_suggestions(self, product_name, product_category=""):
+        """Obtener sugerencias de ingredientes usando Gemini AI"""
+        try:
+            # Verificar que Gemini esté disponible
+            if not GEMINI_AVAILABLE or not genai:
+                raise Exception("Servicio de IA no disponible")
+            
+            # Crear prompt específico para ingredientes gastronómicos
+            prompt = f"""
+            Como chef experto, sugiere ingredientes típicos para el producto gastronómico llamado "{product_name}".
+            {"Categoría: " + product_category if product_category else ""}
+            
+            Por favor responde SOLO en formato JSON válido con esta estructura exacta:
+            {{
+                "suggestions": [
+                    {{
+                        "name": "nombre del ingrediente",
+                        "category": "categoría (proteínas, vegetales, lácteos, condimentos, etc.)",
+                        "quantity": "cantidad sugerida",
+                        "unit": "unidad de medida (g, ml, und, etc.)",
+                        "optional": true/false,
+                        "reason": "breve explicación del por qué es importante"
+                    }}
+                ]
+            }}
+            
+            Límite: máximo 8 ingredientes principales.
+            Sé específico con cantidades y unidades apropiadas para preparación comercial.
+            """
+            
+            # Crear modelo y generar respuesta
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            if not response or not response.text:
+                raise Exception("La IA no generó respuesta")
+            
+            # Intentar parsear JSON de la respuesta
+            import json
+            import re
+            
+            # Extraer JSON de la respuesta (en caso de que tenga texto extra)
+            text = response.text.strip()
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                json_text = json_match.group()
+                suggestions_data = json.loads(json_text)
+            else:
+                # Si no hay JSON, crear respuesta por defecto
+                suggestions_data = {"suggestions": []}
+            
+            # Guardar la interacción en la base de datos para aprendizaje
+            self.save_ai_suggestion_session(product_name, product_category, suggestions_data)
+            
+            return {
+                "success": True,
+                "product_name": product_name,
+                "suggestions": suggestions_data.get("suggestions", []),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error en sugerencias de IA: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "suggestions": []
+            }
+    
+    def save_ai_suggestion_session(self, product_name, category, suggestions_data):
+        """Guardar sesión de sugerencias de IA en la base de datos"""
+        try:
+            query = """
+            INSERT INTO ai_ingredient_suggestions 
+            (product_name, product_category, suggested_ingredients, session_id, model_version, created_at)
+            VALUES (%s, %s, %s, %s, %s, NOW())
+            """
+            
+            # Crear session_id único
+            import uuid
+            session_id = str(uuid.uuid4())[:8]
+            
+            # Convertir suggestions a JSON string
+            import json
+            suggestions_json = json.dumps(suggestions_data)
+            
+            params = (product_name, category, suggestions_json, session_id, "gemini-1.5-flash")
+            execute_mysql_query_with_recovery(query, params)
+            
+        except Exception as e:
+            logger.warning(f"No se pudo guardar sesión de IA: {e}")
+    
     def create_order(self, order_data):
         """Create new order in MySQL database"""
         connection = None
@@ -2703,8 +4239,21 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             """
             
+            # Para delivery, table_number puede ser NULL
+            table_number = order_data.get('table_number')
+            notes = order_data.get('notes', '')
+            
+            if order_data.get('order_type') == 'delivery':
+                # Para delivery, table_number es NULL
+                table_number = None
+                # Agregar info de delivery en las notas
+                delivery_info = f"[DELIVERY] "
+                if order_data.get('delivery_address_id'):
+                    delivery_info += f"Dir ID: {order_data.get('delivery_address_id')} "
+                notes = delivery_info + notes
+            
             params = (
-                order_data.get('table_number'),
+                table_number,  # Puede ser NULL para delivery
                 order_data.get('customer_id'),
                 1,  # waiter_id por defecto
                 order_data.get('status', 'pending'),
@@ -2712,7 +4261,7 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 order_data.get('subtotal', 0),
                 order_data.get('tax', 0),
                 order_data.get('total', 0),
-                order_data.get('notes', '')
+                notes
             )
             
             cursor.execute(query, params)
@@ -4236,9 +5785,15 @@ HISTORIAL RECIENTE:
 
 USUARIO DICE AHORA: "{user_message}"{context_info}
 
-YA CONOCES TODO EL MENÚ (productos, categorías, ingredientes).
+MODELO DE DATOS DEL SISTEMA:
+- Categorías (nivel 1): Grupos principales de productos
+- Subcategorías (nivel 2): Divisiones opcionales dentro de categorías  
+- Productos (nivel 3): Los items que se venden
+- Ingredientes/Componentes (nivel 4): Partes que componen cada producto (tabla 'ingredients')
 
-IMPORTANTE: PRIMERO DETERMINA SI ES UNA CONVERSACIÓN CASUAL O UNA CONSULTA SOBRE EL MENÚ.
+JERARQUÍA: Categoría → Subcategoría → Producto → Ingredientes/Componentes
+
+CONCEPTO CLAVE: Cuando alguien pregunta "qué tiene [producto]", está preguntando por el NIVEL 4 (ingredientes/componentes).
 
 DETERMINA LA INTENCIÓN Y RESPONDE JSON:
 
@@ -4249,15 +5804,17 @@ DETERMINA LA INTENCIÓN Y RESPONDE JSON:
   "confidence": "0-100"
 }}
 
-CRITERIOS DE CLASIFICACIÓN:
-- Si es SALUDO (hola, cómo estás, buen día, qué tal, etc): "greeting"
-- Si es CHARLA CASUAL (gracias, de nada, adiós, chau, hasta luego, etc): "casual_conversation"
-- Si pregunta QUÉ TIENE, INGREDIENTES: "specific_product_ingredients"
-- Si pregunta ACOMPAÑAR, MARIDAJES: "product_pairings" (y usar producto del historial si no especifica)
-- Si contexto tiene selectedFood Y pregunta BEBIDA: "smart_beverage_recommendation"
-- Si pregunta PRECIO, INFO: "specific_product_info"
-- Si quiere RECOMENDACIONES: "product_recommendations"
-- Si no está claro o es consulta general: "general_inquiry"
+CRITERIOS DE CLASIFICACIÓN (EN ORDEN DE PRIORIDAD):
+1. Si es SALUDO (hola, cómo estás, buen día, qué tal, etc): "greeting"
+2. Si es CHARLA CASUAL (gracias, de nada, adiós, chau, hasta luego, etc): "casual_conversation"
+3. Si pregunta sobre COMPOSICIÓN/CONTENIDO de un producto específico (qué tiene, qué lleva, qué incluye, qué trae, componentes, partes, detalles): "specific_product_ingredients"
+4. Si pregunta sobre COMBINACIONES/COMPLEMENTOS de un producto (qué combina, qué va bien con, qué recomiendas con): "product_pairings"
+5. Si contexto tiene producto seleccionado Y pregunta sobre complementos: "smart_beverage_recommendation"
+6. Si pregunta PRECIO o INFORMACIÓN GENERAL de un producto específico: "specific_product_info"
+7. Si pide RECOMENDACIONES sin producto específico: "product_recommendations"
+8. Si no está claro o es consulta general: "general_inquiry"
+
+REGLA FUNDAMENTAL: Cuando el usuario pregunta "qué tiene [PRODUCTO]" o variantes similares, está preguntando por los COMPONENTES/DETALLES INTERNOS del producto -> "specific_product_ingredients"
 
 REGLA CRÍTICA: Si el usuario saluda o hace conversación casual, NO recomiendes productos. Solo responde de forma amigable.
 
@@ -4492,25 +6049,29 @@ RESPONDE SOLO JSON:"""
                               for ing in real_ingredients]
             ingredients_text = chr(10).join(ingredients_list)
             
-            # Prompt ESTRICTO: solo usar ingredientes reales
-            prompt = f"""TAREA: Responder sobre ingredientes del {product_name}.
+            # Prompt para respuesta natural como un mozo
+            prompt = f"""Sos un mozo amigable explicando qué tiene el {product_name}.
             
 USUARIO PREGUNTÓ: "{user_message}"
             
-INGREDIENTES REALES EN BASE DE DATOS:
+INGREDIENTES/COMPONENTES DEL PRODUCTO:
 {ingredients_text}
 
-INSTRUCCIONES ESTRICTAS:
-1. USAR SOLO los ingredientes listados arriba
-2. NO inventar ingredientes nuevos
-3. NO mencionar ingredientes que no estén en la lista
-4. Responder en español argentino natural
-5. Ser informativo sobre las cantidades
+INSTRUCCIONES:
+1. Responder como lo haría un mozo amigable, NO técnico
+2. NO mencionar gramos/cantidades exactas a menos que sea relevante
+3. Enfocarte en lo que le importa al cliente (sabor, textura, ingredientes principales)
+4. Usar español argentino natural y cálido
+5. USAR SOLO los ingredientes listados, no inventar nada
+6. Breve y conciso, 2-3 oraciones máximo
 
-EJEMPLO DE RESPUESTA:
-"Te muestro los ingredientes del {product_name}: [listar SOLO los de la BD con cantidades]"
+EJEMPLO MALO (muy técnico):
+"El Buddha Bowl contiene 150g de quinoa, 100g de garbanzos cocidos, 80g de palta..."
 
-RESPONDE:"""            
+EJEMPLO BUENO (natural):
+"El Buddha Bowl viene con una base de quinoa, garbanzos, palta y tomates cherry. También lleva zanahoria rallada y un aderezo de tahini casero que está buenísimo."
+
+RESPONDE de forma natural:"""            
             
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
@@ -5392,7 +6953,15 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side
             connection = connection_pool.get_connection()
             cursor = connection.cursor()
             
-            # Agregar columnas a customers
+            # Primero, hacer table_number nullable en orders
+            try:
+                cursor.execute("ALTER TABLE orders MODIFY COLUMN table_number INT NULL")
+                connection.commit()
+                results.append("✅ Campo table_number ahora acepta NULL en orders")
+            except Exception as e:
+                results.append(f"ℹ️ Campo table_number: {str(e)}")
+            
+            # Agregar columnas a diferentes tablas
             columns_to_add = [
                 ("customers", "loyalty_points", "INT DEFAULT 0"),
                 ("customers", "total_visits", "INT DEFAULT 0"),
@@ -5402,7 +6971,10 @@ JSON: {{"pairings":[{{"product_id":ID,"reason":"1 línea","type":"appetizer/side
                 ("addresses", "company_id", "INT DEFAULT 1"),
                 ("addresses", "is_active", "BOOLEAN DEFAULT TRUE"),
                 ("addresses", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
-                ("customers", "is_active", "BOOLEAN DEFAULT TRUE")
+                ("customers", "is_active", "BOOLEAN DEFAULT TRUE"),
+                ("orders", "order_type", "VARCHAR(20) DEFAULT 'salon'"),
+                ("orders", "delivery_address_id", "INT NULL"),
+                ("orders", "number_of_people", "INT NULL")
             ]
             
             for table, column, definition in columns_to_add:
