@@ -1020,44 +1020,44 @@ export const ProductsDynamic: React.FC = () => {
                   )}
                 </div>
               )}
-          </div>
-
-          {/* Sección de ingredientes integrada (solo para productos) */}
-          {editingType === 'product' && (
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <ChefHat className="h-5 w-5 text-purple-600" />
-                <h4 className="text-lg font-semibold text-gray-800">Ingredientes con IA</h4>
-              </div>
-              <IngredientsExpander
-                productId={editingItem?.id || 0}
-                productName={editingItem?.name || ''}
-                productCategory={categories.find(c => c.id === editingItem?.category_id)?.name}
-                isOpen={true}
-                onToggle={() => {}} // Siempre abierto en el modal
-                hideHeader={true} // Ocultar header ya que el modal tiene el suyo
-              />
             </div>
-          )}
 
-          {/* Estado activo */}
-          <div className="flex items-center mt-6">
-            <input
-              type="checkbox"
-              id="is_active"
-              checked={editingItem?.is_active !== false}
-              onChange={(e) => {
-                const newValue = e.target.checked;
-                setEditingItem(prev => ({ ...prev, is_active: newValue }));
-              }}
-              className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
-              {editingType === 'product' ? 'Producto activo y visible' : 
-               editingType === 'subcategory' ? 'Subcategoría activa' : 
-               'Categoría activa'}
-            </label>
-          </div>
+            {/* Sección de ingredientes integrada (solo para productos) */}
+            {editingType === 'product' && (
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ChefHat className="h-5 w-5 text-purple-600" />
+                  <h4 className="text-lg font-semibold text-gray-800">Ingredientes con IA</h4>
+                </div>
+                <IngredientsExpander
+                  productId={editingItem?.id || 0}
+                  productName={editingItem?.name || ''}
+                  productCategory={categories.find(c => c.id === editingItem?.category_id)?.name}
+                  isOpen={true}
+                  onToggle={() => {}} // Siempre abierto en el modal
+                  hideHeader={true} // Ocultar header ya que el modal tiene el suyo
+                />
+              </div>
+            )}
+
+            {/* Estado activo */}
+            <div className="flex items-center mt-6">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={editingItem?.is_active !== false}
+                onChange={(e) => {
+                  const newValue = e.target.checked;
+                  setEditingItem(prev => ({ ...prev, is_active: newValue }));
+                }}
+                className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
+                {editingType === 'product' ? 'Producto activo y visible' : 
+                 editingType === 'subcategory' ? 'Subcategoría activa' : 
+                 'Categoría activa'}
+              </label>
+            </div>
         </div>
       </SlideDrawer>
     );
