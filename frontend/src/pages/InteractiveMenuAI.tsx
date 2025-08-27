@@ -62,6 +62,9 @@ export const InteractiveMenuAI: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showMenuButton, setShowMenuButton] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [displayMode, setDisplayMode] = useState<'normal' | 'showcase'>('normal');
+  const [showcaseProduct, setShowcaseProduct] = useState<Product | null>(null);
+  const [showcasePairings, setShowcasePairings] = useState<any[]>([]);
   const [conversationStage, setConversationStage] = useState<'initial' | 'pairings' | 'beverages'>('initial');
   const [selectedFood, setSelectedFood] = useState<Product | null>(null);
   const [selectedPairing, setSelectedPairing] = useState<Product | null>(null);
@@ -342,18 +345,40 @@ export const InteractiveMenuAI: React.FC = () => {
     }
   };
 
-  const addToCart = (product: Product) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        return prev.map(item => 
-          item.product.id === product.id 
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      return [...prev, { product, quantity: 1 }];
-    });
+  const [flyingProduct, setFlyingProduct] = useState<{product: Product, startPos: {x: number, y: number}} | null>(null);
+  
+  const addToCart = (product: Product, event?: React.MouseEvent) => {
+    // Capturar posición del elemento clickeado para la animación
+    if (event) {
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      setFlyingProduct({
+        product,
+        startPos: {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2
+        }
+      });
+      
+      // Quitar el producto volador después de la animación
+      setTimeout(() => {
+        setFlyingProduct(null);
+      }, 800);
+    }
+    
+    // Agregar al carrito después de un pequeño delay para sincronizar con la animación
+    setTimeout(() => {
+      setCart(prev => {
+        const existing = prev.find(item => item.product.id === product.id);
+        if (existing) {
+          return prev.map(item => 
+            item.product.id === product.id 
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        }
+        return [...prev, { product, quantity: 1 }];
+      });
+    }, 400);
   };
 
   const handleUserInput = async () => {
@@ -1051,7 +1076,7 @@ export const InteractiveMenuAI: React.FC = () => {
                                     whileTap={{ scale: 0.9 }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      addToCart(product);
+                                      addToCart(product, e);
                                     }}
                                     className="p-2 bg-purple-600 text-white rounded-full"
                                   >
@@ -1248,14 +1273,15 @@ export const InteractiveMenuAI: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Carrito flotante mejorado */}
+      {/* Carrito flotante mejorado - Posicionado arriba debajo del ícono */}
       <AnimatePresence>
         {cart.length > 0 && (
           <motion.div
-            initial={{ x: 100, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 100, opacity: 0 }}
-            className="fixed right-4 bottom-24 bg-white rounded-2xl shadow-2xl p-4 min-w-[250px]"
+            initial={{ y: -20, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: -20, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", damping: 20, stiffness: 300 }}
+            className="fixed right-4 top-20 bg-white rounded-2xl shadow-2xl p-4 min-w-[280px] max-w-[320px] z-50"
           >
             <h3 className="font-bold text-gray-800 mb-2">Tu pedido</h3>
             <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -1336,6 +1362,48 @@ export const InteractiveMenuAI: React.FC = () => {
           floatingMessage: {floatingMessage || 'null'}
         </div>
       )}
+      
+      {/* 🚀 Animación de producto volando al carrito */}
+      <AnimatePresence>
+        {flyingProduct && (
+          <motion.div
+            initial={{ 
+              x: flyingProduct.startPos.x - window.innerWidth / 2,
+              y: flyingProduct.startPos.y - window.innerHeight / 2,
+              scale: 1,
+              opacity: 1
+            }}
+            animate={{ 
+              x: window.innerWidth / 2 - 100, // Posición del carrito
+              y: -window.innerHeight / 2 + 60, // Posición del carrito
+              scale: 0.2,
+              opacity: 0.5
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              duration: 0.8,
+              ease: [0.32, 0.72, 0, 1]
+            }}
+            className="fixed top-1/2 left-1/2 z-50 pointer-events-none"
+            style={{
+              marginLeft: '-50px',
+              marginTop: '-50px'
+            }}
+          >
+            <div className="bg-white rounded-xl shadow-2xl p-2 w-24 h-24 flex items-center justify-center">
+              {flyingProduct.product.image_url ? (
+                <img 
+                  src={flyingProduct.product.image_url}
+                  alt={flyingProduct.product.name}
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400 rounded-lg" />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

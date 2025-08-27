@@ -1825,6 +1825,49 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                     })
                     return
                 
+                elif user_intent['intent_type'] == 'general_inquiry':
+                    # Usuario hace una pregunta general sobre productos (ej: "tenés pastas?", "hay alguna pastita rica?")
+                    print(f"\n🔍 GENERAL INQUIRY: Buscando productos relevantes para: '{user_message}'")
+                    
+                    # Usar IA para entender qué categoría o tipo de producto busca
+                    categories_list = list(set([p['category_name'] for p in products_data if p.get('category_name')]))
+                    
+                    # Buscar productos relevantes usando IA
+                    relevant_products = self.find_relevant_products_with_ai(
+                        user_message, 
+                        products_data,
+                        categories_list,
+                        thread_id
+                    )
+                    
+                    # Si encontramos productos relevantes, agrupar por categoría
+                    if relevant_products:
+                        categorized = {}
+                        for product in relevant_products:
+                            category = product.get('category', 'General')
+                            if category not in categorized:
+                                categorized[category] = []
+                            categorized[category].append(product)
+                        
+                        print(f"   📦 Encontrados {len(relevant_products)} productos en {len(categorized)} categorías")
+                        
+                        send_response_with_thread({
+                            'response': user_intent.get('response_text', '¡Por supuesto! Te muestro nuestras opciones:'),
+                            'categorizedProducts': categorized,
+                            'recommendedProducts': relevant_products,  # También enviar como array por si acaso
+                            'status': 'success',
+                            'query_type': 'general_inquiry'
+                        })
+                    else:
+                        # No se encontraron productos relevantes
+                        send_response_with_thread({
+                            'response': 'Hmm, no encontré exactamente lo que buscas. ¿Podrías ser más específico o te muestro nuestras especialidades?',
+                            'recommendedProducts': [],
+                            'status': 'success',
+                            'query_type': 'general_inquiry'
+                        })
+                    return
+                
                 else:
                     # Fallback: recomendaciones generales
                     print(f"\n⚠️ FALLBACK ACTIVADO!")
@@ -3890,6 +3933,171 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             if connection:
                 connection.close()
 
+    def find_relevant_products_with_ai(self, user_message, products_data, categories_list, thread_id):
+        """
+        Encuentra productos relevantes usando IA para entender variaciones del lenguaje.
+        Ej: "tenés pastas", "alguna pastita rica", "que hay de fideos" -> todas buscan pastas
+        """
+        try:
+            import google.generativeai as genai
+            
+            # Configurar Gemini
+            if not hasattr(self, '_genai_configured'):
+                if GEMINI_API_KEY:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self._genai_configured = True
+                else:
+                    # Fallback sin IA
+                    return self.find_products_by_keywords(user_message, products_data)
+            
+            # Crear lista de productos resumida para el contexto
+            product_samples = {}
+            for product in products_data[:100]:  # Limitar para no sobrecargar el prompt
+                cat = product.get('category_name', 'General')
+                if cat not in product_samples:
+                    product_samples[cat] = []
+                if len(product_samples[cat]) < 3:  # Solo 3 ejemplos por categoría
+                    product_samples[cat].append(product['name'])
+            
+            prompt = f"""SISTEMA: Eres un asistente inteligente que entiende variaciones del lenguaje y sinónimos.
+
+MENSAJE DEL USUARIO: "{user_message}"
+
+CATEGORÍAS DISPONIBLES:
+{', '.join(categories_list)}
+
+PRODUCTOS DISPONIBLES (muestra):
+{chr(10).join([f"- {cat}: {', '.join(prods[:3])}" for cat, prods in product_samples.items()])}
+
+TAREA: Analizar el mensaje del usuario y determinar qué productos busca, considerando:
+1. Variaciones del lenguaje (diminutivos, aumentativos, coloquialismos)
+2. Sinónimos y términos relacionados
+3. Descripciones indirectas (ej: "algo liviano" podría referirse a productos con ciertas características)
+
+El usuario podría usar términos coloquiales, diminutivos o descripciones vagas.
+Tu trabajo es interpretar la INTENCIÓN real detrás del mensaje.
+
+RESPONDE EN JSON:
+{{
+  "search_categories": ["categorías relevantes de la lista disponible"],
+  "search_keywords": ["palabras clave extraídas del mensaje"],
+  "search_description": ["características que busca el usuario"],
+  "confidence": 0-100
+}}
+
+Si el usuario no busca algo específico, devuelve arrays vacíos.
+RESPONDE SOLO JSON:"""
+            
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            
+            # Parsear respuesta
+            import json
+            import re
+            
+            json_match = re.search(r'\{.*?\}', response.text, re.DOTALL)
+            if json_match:
+                ai_response = json.loads(json_match.group(0))
+                
+                relevant_products = []
+                
+                # Buscar por categorías
+                if ai_response.get('search_categories'):
+                    for cat in ai_response['search_categories']:
+                        for product in products_data:
+                            if product.get('category_name', '').lower() == cat.lower():
+                                relevant_products.append({
+                                    'id': product['id'],
+                                    'name': product['name'],
+                                    'description': product['description'],
+                                    'price': float(product['price']),
+                                    'category': product['category_name'],
+                                    'image_url': product.get('image_url')
+                                })
+                
+                # También buscar por keywords si no hay suficientes resultados
+                if len(relevant_products) < 4 and ai_response.get('search_keywords'):
+                    for keyword in ai_response['search_keywords']:
+                        keyword_lower = keyword.lower()
+                        for product in products_data:
+                            # Evitar duplicados
+                            if any(p['id'] == product['id'] for p in relevant_products):
+                                continue
+                            
+                            if (keyword_lower in product['name'].lower() or 
+                                keyword_lower in product.get('description', '').lower()):
+                                relevant_products.append({
+                                    'id': product['id'],
+                                    'name': product['name'],
+                                    'description': product['description'],
+                                    'price': float(product['price']),
+                                    'category': product['category_name'],
+                                    'image_url': product.get('image_url')
+                                })
+                                
+                                if len(relevant_products) >= 12:  # Límite razonable
+                                    break
+                
+                print(f"   🤖 IA encontró: {len(relevant_products)} productos relevantes")
+                return relevant_products
+                
+        except Exception as e:
+            print(f"   ⚠️ Error en IA, usando búsqueda por keywords: {e}")
+            return self.find_products_by_keywords(user_message, products_data)
+    
+    def find_products_by_keywords(self, user_message, products_data):
+        """Fallback: búsqueda simple por keywords sin IA - totalmente dinámica"""
+        message_lower = user_message.lower()
+        words = message_lower.split()
+        relevant = []
+        scores = {}  # Para rankear por relevancia
+        
+        for product in products_data:
+            score = 0
+            product_name_lower = product['name'].lower()
+            product_desc_lower = product.get('description', '').lower()
+            category_lower = product.get('category_name', '').lower()
+            
+            # Buscar coincidencias en nombre, descripción y categoría
+            for word in words:
+                if len(word) < 3:  # Ignorar palabras muy cortas
+                    continue
+                    
+                # Puntaje más alto si coincide con el nombre
+                if word in product_name_lower:
+                    score += 10
+                # Puntaje medio si coincide con la categoría
+                elif word in category_lower:
+                    score += 5
+                # Puntaje bajo si coincide con la descripción
+                elif word in product_desc_lower:
+                    score += 2
+                    
+                # Bonus si es coincidencia exacta
+                if word == product_name_lower:
+                    score += 20
+                    
+            if score > 0:
+                scores[product['id']] = score
+                relevant.append({
+                    'id': product['id'],
+                    'name': product['name'],
+                    'description': product['description'],
+                    'price': float(product['price']),
+                    'category': product['category_name'],
+                    'image_url': product.get('image_url'),
+                    '_score': score
+                })
+        
+        # Ordenar por score y devolver los más relevantes
+        relevant.sort(key=lambda x: x['_score'], reverse=True)
+        
+        # Quitar el score del resultado final
+        for item in relevant:
+            item.pop('_score', None)
+            
+        return relevant[:12]  # Limitar resultados
+    
     def interpret_user_intent_with_ai_persistent(self, user_message, thread_id, context=None):
         """Interpretar intención usando contexto persistente (como ChatGPT)"""
         
