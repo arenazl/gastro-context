@@ -160,6 +160,19 @@ class ImageCacheService {
     return null;
   }
 
+  async getCachedImageUrl(url: string): Promise<string> {
+    const cachedResponse = await this.getCachedImage(url);
+    
+    if (cachedResponse) {
+      const blob = await cachedResponse.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      console.log(`🖼️ Created blob URL from cache for: ${url}`);
+      return objectUrl;
+    }
+    
+    return url;
+  }
+
   async isImageCached(url: string): Promise<boolean> {
     // Verificar primero en el registry para evitar llamadas repetidas al Cache API
     if (this.cacheCheckRegistry.has(url)) {

@@ -27,11 +27,12 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
   const [shouldLoad, setShouldLoad] = useState(false);
   const imgRef = useRef<HTMLDivElement>(null);
   const [actualSrc, setActualSrc] = useState<string>('');
+  const blobUrlRef = useRef<string | null>(null);
 
-  // Verificar si la imagen ya está en Cache API
-  const checkIfImageInCache = async (imageSrc: string): Promise<boolean> => {
-    const cached = await imageCacheService.isImageCached(imageSrc);
-    return cached;
+  // Obtener imagen del caché o URL original
+  const getImageSource = async (imageSrc: string): Promise<string> => {
+    const cachedUrl = await imageCacheService.getCachedImageUrl(imageSrc);
+    return cachedUrl;
   };
 
   // Intersection Observer para lazy loading
@@ -41,12 +42,16 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
     const imageToLoad = src || fallbackSrc;
 
     // Verificar primero si la imagen está en cache
-    checkIfImageInCache(imageToLoad).then((inCache) => {
+    imageCacheService.isImageCached(imageToLoad).then(async (inCache) => {
       if (inCache) {
-        // Si está en cache, cargar inmediatamente
+        // Si está en cache, cargar inmediatamente desde el caché
         console.log(`🎯 Image from cache: ${imageToLoad}`);
+        const cachedUrl = await getImageSource(imageToLoad);
+        if (cachedUrl.startsWith('blob:')) {
+          blobUrlRef.current = cachedUrl;
+        }
         setShouldLoad(true);
-        setActualSrc(imageToLoad);
+        setActualSrc(cachedUrl);
         setIsLoading(false);
         return;
       }
@@ -54,11 +59,16 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
       console.log(`📥 Image not cached, lazy loading: ${imageToLoad}`);
       // Si no está en cache, usar Intersection Observer
       const observer = new IntersectionObserver(
-        (entries) => {
+        async (entries) => {
           const [entry] = entries;
           if (entry.isIntersecting && !shouldLoad) {
             setShouldLoad(true);
-            setActualSrc(imageToLoad);
+            // Intentar obtener del caché primero
+            const sourceUrl = await getImageSource(imageToLoad);
+            if (sourceUrl.startsWith('blob:')) {
+              blobUrlRef.current = sourceUrl;
+            }
+            setActualSrc(sourceUrl);
           }
         },
         {
@@ -73,6 +83,13 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
       
       return () => observer.disconnect();
     });
+    // Cleanup blob URLs
+    return () => {
+      if (blobUrlRef.current && blobUrlRef.current.startsWith('blob:')) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
   }, [src, fallbackSrc, shouldLoad]);
 
   const handleImageLoad = () => {
