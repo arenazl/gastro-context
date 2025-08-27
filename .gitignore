@@ -485,6 +485,24 @@ invoices/
 tax_reports/
 
 # ==================================
+# Archivos temporales y scripts de migración con credenciales
+# ==================================
+backend/alter_orders_table.py
+backend/fix_orders_delivery.py
+backend/add_carlos_addresses.py
+backend/update_orders_via_api.py
+backend/cure_product_images.py
+backend/scripts/diagnose_schema.py
+backend/scripts/fix_ingredients_schema.py
+backend/scripts/migrate_ingredients_schema.py
+backend/scripts/setup_employees_module.py
+backend/scripts/setup_ingredients_module.py
+backend/scripts/test_mercadopago.py
+backend/MERCADOPAGO_GUIA_RAPIDA.md
+backend/setup_mercadopago.md
+backend/ngrok
+
+# ==================================
 # Archivos que SÍ queremos commitear
 # ==================================
 
