@@ -37,6 +37,7 @@ import { PageHeader } from '../components/PageHeader';
 import { SlideDrawer } from '../components/SlideDrawer';
 import { ImageWithSkeleton } from '../components/ImageWithSkeleton';
 import { IngredientsExpander } from '../components/IngredientsExpander';
+import { SimpleProductModal } from '../components/SimpleProductModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { styles, getListItemClasses, combineClasses } from '../styles/SharedStyles';
 import dataFetchService from '../services/dataFetchService';
@@ -627,8 +628,6 @@ export const ProductsDynamic: React.FC = () => {
 
   // Slide Drawer para edición con breadcrumb dinámico
   const EditDrawer = () => {
-    console.log('🚨 EditDrawer re-renderizado!', { editingItem, editingType });
-    if (!editingItem || !editingType) return null;
 
     // Construir breadcrumb según el contexto
     const getBreadcrumb = () => {
@@ -756,15 +755,8 @@ export const ProductsDynamic: React.FC = () => {
                   type="text"
                   value={editingItem?.name || ''}
                   onChange={(e) => {
-                    console.log('🔥 NOMBRE onChange:', e.target.value);
-                    console.log('🔥 editingItem antes:', editingItem);
                     const newValue = e.target.value;
-                    setEditingItem(prev => {
-                      console.log('🔥 setEditingItem prev:', prev);
-                      const newItem = { ...prev, name: newValue };
-                      console.log('🔥 setEditingItem new:', newItem);
-                      return newItem;
-                    });
+                    setEditingItem(prev => ({ ...prev, name: newValue }));
                   }}
                   className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder={`Nombre del ${editingType === 'category' ? 'categoría' : editingType === 'subcategory' ? 'subcategoría' : 'producto'}`}
@@ -1553,9 +1545,32 @@ export const ProductsDynamic: React.FC = () => {
         </div>
       </div>
 
-      {/* Slide Drawer de edición */}
+      {/* Modal Simple para productos - TEMPORAL PARA DEBUG */}
+      {editingType === 'product' && (
+        <SimpleProductModal
+          isOpen={!!editingItem}
+          onClose={() => {
+            setEditingItem(null);
+            setEditingType(null);
+          }}
+          product={editingItem}
+          categoryName={categories.find(c => c.id === selectedCategory)?.name}
+          subcategoryName={selectedSubcategory !== 'all' ? 
+            subcategoriesCache.get(selectedCategory!)?.find(s => s.id === selectedSubcategory)?.name : 
+            undefined
+          }
+          onSave={async (updatedProduct) => {
+            // Usar la lógica existente de handleSave
+            console.log('Guardando producto:', updatedProduct);
+            setEditingItem(updatedProduct);
+            await handleSave();
+          }}
+        />
+      )}
+      
+      {/* Slide Drawer de edición - Solo para categorías y subcategorías */}
       <AnimatePresence>
-        {(editingItem && editingType) && <EditDrawer />}
+        {(editingItem && editingType && editingType !== 'product') && <EditDrawer />}
       </AnimatePresence>
 
     </div>

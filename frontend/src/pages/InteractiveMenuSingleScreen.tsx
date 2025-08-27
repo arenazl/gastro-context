@@ -2,11 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import dataFetchService from '../services/dataFetchService';
+import { ImageWithSkeleton } from '../components/ImageWithSkeleton';
+import { imageCacheService } from '../services/imageCache.service';
 
 import {
   ShoppingCartIcon,
   SparklesIcon,
-  XMarkIcon
+  XMarkIcon,
+  MicrophoneIcon,
+  UserGroupIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 
 interface Product {
@@ -56,14 +61,79 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
   const [floatingMessage, setFloatingMessage] = useState<string | null>(null); // 🎬 MENSAJE FLOTANTE PARA SALUDOS
   const [showCartDropdown, setShowCartDropdown] = useState(false); // Dropdown del carrito
   const [previousView, setPreviousView] = useState<CurrentView | null>(null); // Estado anterior antes de seleccionar producto
+  const [categoryImages, setCategoryImages] = useState<{[key: string]: string}>({}); // Imágenes consistentes por categoría
+  const [isRecording, setIsRecording] = useState(false); // Estado para grabación de voz
+  const [recognition, setRecognition] = useState<any>(null); // Web Speech API
 
   const inputRef = useRef<HTMLInputElement>(null);
   const cartIconRef = useRef<HTMLDivElement>(null);
+
+  // Precargar solo imágenes de categorías (para fondos) cuando se carguen productos
+  useEffect(() => {
+    if (currentView.type === 'response' && currentView.categorizedProducts) {
+      const images: {[key: string]: string} = {};
+      
+      // Solo precargar imágenes de categorías para fondos, no todos los productos
+      Object.entries(currentView.categorizedProducts).slice(0, 4).forEach(([category, products]) => {
+        const productsWithImages = products.filter(p => p.image_url);
+        if (productsWithImages.length > 0) {
+          const imageUrl = productsWithImages[0].image_url;
+          images[category] = imageUrl;
+          
+          // Precargar solo la imagen de categoría (sin Promise.all para no bloquear)
+          if (imageUrl && typeof window !== 'undefined') {
+            const img = new Image();
+            img.onload = () => console.log(`✅ Precargada categoría: ${category}`);
+            img.onerror = () => console.log(`❌ Error en categoría: ${category}`);
+            img.src = imageUrl;
+          }
+        }
+      });
+      
+      setCategoryImages(images);
+    }
+  }, [currentView.type, currentView.categorizedProducts]);
 
   useEffect(() => {
     // Generar thread ID único
     const newThreadId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     setThreadId(newThreadId);
+
+    // Inicializar Web Speech API
+    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+      recognitionInstance.continuous = false;
+      recognitionInstance.interimResults = false;
+      recognitionInstance.lang = 'es-ES';
+
+      recognitionInstance.onstart = () => {
+        setIsRecording(true);
+        console.log('🎤 Iniciando grabación de voz');
+      };
+
+      recognitionInstance.onend = () => {
+        setIsRecording(false);
+        console.log('🎤 Finalizando grabación de voz');
+      };
+
+      recognitionInstance.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('🗣️ Texto reconocido:', transcript);
+        setUserInput(transcript);
+        // Auto-enviar el mensaje después de reconocer la voz
+        setTimeout(() => {
+          handleUserInput();
+        }, 500);
+      };
+
+      recognitionInstance.onerror = (event: any) => {
+        console.error('❌ Error en reconocimiento de voz:', event.error);
+        setIsRecording(false);
+      };
+
+      setRecognition(recognitionInstance);
+    }
 
     // Recuperar mensaje flotante si existe y no han pasado más de 5 segundos
     const savedMessage = sessionStorage.getItem('floatingMessage');
@@ -328,6 +398,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
     }, 1500);
   };
 
+  const handleVoiceInput = () => {
+    if (recognition && !isRecording) {
+      recognition.start();
+    } else if (recognition && isRecording) {
+      recognition.stop();
+    }
+  };
+
   const cartTotal = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -451,11 +529,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               }}
             >
               <div className="bg-white rounded-lg p-2 shadow-xl">
-                {product.image_url ? (
-                  <img src={product.image_url} alt={product.name} className="w-16 h-16 object-cover rounded" />
-                ) : (
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded" />
-                )}
+                <div className="w-16 h-16 rounded overflow-hidden">
+                  <ImageWithSkeleton
+                    src={product.image_url}
+                    alt={product.name}
+                    className="w-full h-full"
+                    skeletonClassName="w-full h-full rounded"
+                  />
+                </div>
               </div>
             </motion.div>
           );
@@ -537,15 +618,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 <div className="flex-shrink-0 w-1/3">
                   {currentView.products[0] && (
                     <div className="text-center">
-                      {currentView.products[0].image_url ? (
-                        <img
+                      <div className="w-full h-48 rounded-xl mb-4 overflow-hidden">
+                        <ImageWithSkeleton
                           src={currentView.products[0].image_url}
                           alt={currentView.products[0].name}
-                          className="w-full h-48 object-cover rounded-xl mb-4"
+                          className="w-full h-full"
+                          skeletonClassName="w-full h-full rounded-xl"
                         />
-                      ) : (
-                        <div className="w-full h-48 bg-gradient-to-br from-purple-400 to-pink-400 rounded-xl mb-4" />
-                      )}
+                      </div>
                       <h3 className="text-2xl font-bold text-gray-800 mb-2">
                         {currentView.products[0].name}
                       </h3>
@@ -598,12 +678,12 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
               <div className="category-accordion" style={{ zIndex: 1 }}>
                 <ul>
                   {Object.entries(currentView.categorizedProducts).slice(0, 4).map(([category, products], index) => {
-                    // Obtener una imagen aleatoria de los productos que tengan imagen
+                    // Usar siempre el primer producto con imagen para consistencia y mejor caché
                     const productsWithImages = products.filter(p => p.image_url);
-                    const randomProduct = productsWithImages.length > 0 
-                      ? productsWithImages[Math.floor(Math.random() * productsWithImages.length)]
+                    const firstProduct = productsWithImages.length > 0 
+                      ? productsWithImages[0]  // Siempre usar el primero para consistencia
                       : products[0];
-                    const backgroundImage = randomProduct?.image_url;
+                    const backgroundImage = categoryImages[category] || firstProduct?.image_url;
                     
                     return (
                       <li key={category} className={Object.keys(currentView.categorizedProducts).length === 1 ? 'auto-expanded' : ''}>
@@ -622,7 +702,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                             />
                           )}
                           {/* Overlay gradiente más suave */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/50 to-pink-900/50 z-10" />
+                          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 to-pink-900/20 z-10" />
                           
                           {/* Contenido del título */}
                           <div className="relative z-20 flex items-center justify-between h-full px-8">
@@ -636,8 +716,31 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                         </div>
 
                       <div className="category-products">
-                        <div className="products-grid-accordion">
-                          {products.map((product) => (
+                        <div 
+                          className="products-grid-accordion overflow-x-auto scroll-smooth"
+                          onWheel={(e) => {
+                            // Solo interceptar scroll vertical
+                            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                              e.preventDefault();
+                              const container = e.currentTarget;
+                              const maxScroll = container.scrollWidth - container.clientWidth;
+                              
+                              // Solo hacer scroll si hay contenido para scrollear
+                              if (maxScroll > 0) {
+                                // Usar requestAnimationFrame para scroll más suave
+                                const startScrollLeft = container.scrollLeft;
+                                const scrollAmount = e.deltaY * 0.8; // Reducir sensibilidad
+                                const targetScrollLeft = Math.max(0, Math.min(maxScroll, startScrollLeft + scrollAmount));
+                                
+                                container.scrollTo({
+                                  left: targetScrollLeft,
+                                  behavior: 'smooth'
+                                });
+                              }
+                            }
+                          }}
+                        >
+                          {products.slice(0, 8).map((product) => (
                             <motion.div
                               key={product.id}
                               initial={{ opacity: 0, scale: 0.8 }}
@@ -650,15 +753,15 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                                 className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-3 cursor-pointer hover:shadow-xl transition-shadow h-[280px] flex flex-col"
                                 onClick={() => selectProductAndGetPairings(product)}
                               >
-                                {product.image_url ? (
-                                  <img
+                                <div className="w-full h-36 rounded-lg mb-2 flex-shrink-0 overflow-hidden bg-gray-100">
+                                  <ImageWithSkeleton
                                     src={product.image_url}
                                     alt={product.name}
-                                    className="w-full h-36 object-cover rounded-lg mb-2 flex-shrink-0"
+                                    className="w-full h-full"
+                                    skeletonClassName="w-full h-full rounded-lg bg-gray-200"
+                                    objectFit="contain"
                                   />
-                                ) : (
-                                  <div className="w-full h-36 bg-gradient-to-br from-purple-400 to-pink-400 rounded-lg mb-2 flex-shrink-0" />
-                                )}
+                                </div>
                                 <h4 className="font-bold text-gray-800 text-sm line-clamp-2">{product.name}</h4>
                                 <p className="text-xs text-gray-600 line-clamp-2 flex-grow">{product.description}</p>
                                 <div className="flex justify-between items-center mt-2">
@@ -681,7 +784,7 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                         </div>
                       </div>
                     </li>
-                    );
+                    )
                   })}
                 </ul>
               </div>
@@ -720,8 +823,10 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 }}
               >
                 <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-80 shadow-2xl">
-                  <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
-                    <span className="text-2xl">🥗</span>
+                  <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-3">
+                    <div className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-lg">
+                      <UserGroupIcon className="w-6 h-6 text-green-600" />
+                    </div>
                     Entradas y Acompañamientos
                   </h3>
                   <div className="space-y-2 max-h-[450px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
@@ -741,15 +846,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                           className="bg-white/95 rounded-lg p-3 cursor-pointer hover:bg-white transition-colors flex items-center gap-3 shadow-md"
                           onClick={() => selectProductAndGetPairings(pairing, 'left')}
                         >
-                          {pairing.image_url ? (
-                            <img
+                          <div className="w-16 h-16 rounded overflow-hidden flex-shrink-0">
+                            <ImageWithSkeleton
                               src={pairing.image_url}
                               alt={pairing.name}
-                              className="w-16 h-16 object-cover rounded"
+                              className="w-full h-full"
+                              skeletonClassName="w-full h-full rounded"
                             />
-                          ) : (
-                            <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded flex-shrink-0" />
-                          )}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-sm truncate">{pairing.name}</h4>
                             <p className="text-xs text-gray-600 truncate">{pairing.description}</p>
@@ -847,8 +951,10 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 }}
               >
                 <div className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 w-80 shadow-2xl">
-                  <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-2">
-                    <span className="text-2xl">🍷</span>
+                  <h3 className="text-white font-bold mb-3 text-lg flex items-center gap-3">
+                    <div className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-lg">
+                      <BeakerIcon className="w-6 h-6 text-purple-600" />
+                    </div>
                     Bebidas Recomendadas
                   </h3>
                   <div className="space-y-2 max-h-[450px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
@@ -868,15 +974,14 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                           className="bg-white/95 rounded-lg p-3 cursor-pointer hover:bg-white transition-colors flex items-center gap-3 shadow-md"
                           onClick={() => selectProductAndGetPairings(pairing, 'right')}
                         >
-                          {pairing.image_url ? (
-                            <img
+                          <div className="w-16 h-16 rounded overflow-hidden flex-shrink-0">
+                            <ImageWithSkeleton
                               src={pairing.image_url}
                               alt={pairing.name}
-                              className="w-16 h-16 object-cover rounded"
+                              className="w-full h-full"
+                              skeletonClassName="w-full h-full rounded"
                             />
-                          ) : (
-                            <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded flex-shrink-0" />
-                          )}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-sm truncate">{pairing.name}</h4>
                             <p className="text-xs text-gray-600 truncate">{pairing.description}</p>
@@ -921,23 +1026,41 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
                 setUserInput(e.target.value);
               }}
               onKeyPress={(e) => e.key === 'Enter' && handleUserInput()}
-              placeholder="Escribí qué tenés ganas..."
-              className="w-full px-6 py-4 pr-14 text-lg bg-white/90 backdrop-blur-md border-2 border-purple-400 rounded-2xl focus:outline-none focus:ring-4 focus:ring-purple-400 focus:border-transparent transition-all"
+              placeholder="Escribí qué tenés ganas o manteé presionado el micrófono..."
+              className="w-full px-6 py-4 pr-28 text-lg bg-white/90 backdrop-blur-md border-2 border-purple-400 rounded-2xl focus:outline-none focus:ring-4 focus:ring-purple-400 focus:border-transparent transition-all"
               disabled={isLoading}
             />
+            {/* Botón de envío de texto */}
+            {userInput.trim() && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  console.log("🔴🔴🔴 BOTÓN ENVIAR CLICKEADO 🔴🔴🔴");
+                  console.log("userInput actual:", userInput);
+                  console.log("isLoading:", isLoading);
+                  handleUserInput();
+                }}
+                disabled={isLoading}
+                className="absolute right-16 top-1/2 -translate-y-1/2 p-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SparklesIcon className="w-6 h-6" />
+              </motion.button>
+            )}
+            
+            {/* Botón de micrófono */}
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                console.log("🔴🔴🔴 BOTÓN CLICKEADO 🔴🔴🔴");
-                console.log("userInput actual:", userInput);
-                console.log("isLoading:", isLoading);
-                handleUserInput();
-              }}
-              disabled={isLoading || !userInput.trim()}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleVoiceInput}
+              disabled={isLoading}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 p-3 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed ${
+                isRecording 
+                  ? 'bg-gradient-to-r from-red-600 to-red-700 animate-pulse' 
+                  : 'bg-gradient-to-r from-purple-600 to-pink-600'
+              }`}
             >
-              <SparklesIcon className="w-6 h-6" />
+              <MicrophoneIcon className="w-6 h-6" />
             </motion.button>
           </div>
         </div>

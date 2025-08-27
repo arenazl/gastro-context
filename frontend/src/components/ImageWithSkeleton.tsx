@@ -11,6 +11,8 @@ interface ImageWithSkeletonProps {
   skeletonClassName?: string;
   onLoad?: () => void;
   onError?: () => void;
+  objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+  forceLoad?: boolean;
 }
 
 export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
@@ -20,7 +22,9 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
   className = '',
   skeletonClassName = '',
   onLoad,
-  onError
+  onError,
+  objectFit = 'contain',
+  forceLoad = false
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -40,6 +44,18 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
     if (!imgRef.current) return;
 
     const imageToLoad = src || fallbackSrc;
+    
+    // Si forceLoad es true, cargar inmediatamente
+    if (forceLoad) {
+      getImageSource(imageToLoad).then((sourceUrl) => {
+        if (sourceUrl.startsWith('blob:')) {
+          blobUrlRef.current = sourceUrl;
+        }
+        setShouldLoad(true);
+        setActualSrc(sourceUrl);
+      });
+      return;
+    }
 
     // Verificar primero si la imagen está en cache
     imageCacheService.isImageCached(imageToLoad).then(async (inCache) => {
@@ -95,8 +111,11 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
   }, [src, fallbackSrc, shouldLoad]);
 
   const handleImageLoad = () => {
-    setIsLoading(false);
-    onLoad?.();
+    // Delay mínimo para que se vea el skeleton
+    setTimeout(() => {
+      setIsLoading(false);
+      onLoad?.();
+    }, 200);
   };
 
   const handleImageError = () => {
@@ -108,15 +127,15 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
     onError?.();
   };
 
-  // Skeleton component con animación tipo Facebook
+  // Skeleton component con animación tipo Facebook más visible
   const SkeletonLoader = () => (
-    <div className={`relative overflow-hidden bg-gray-200 ${className} ${skeletonClassName}`}>
+    <div className={`relative overflow-hidden bg-gray-300 ${className} ${skeletonClassName}`}>
       {/* Animated shimmer effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse">
+      <div className="absolute inset-0 bg-gradient-to-r from-gray-300 via-gray-200 to-gray-300 animate-pulse">
         <div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-50 transform -skew-x-12 animate-shimmer"
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-60 transform -skew-x-12 animate-shimmer"
           style={{
-            animation: 'shimmer 1.5s ease-in-out infinite'
+            animation: 'shimmer 1.2s ease-in-out infinite'
           }}
         />
       </div>
@@ -124,10 +143,10 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
       {/* Content placeholder */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+          <ImageIcon className="h-10 w-10 text-gray-500 mx-auto mb-2" />
           <div className="space-y-2">
-            <div className="h-3 bg-gray-300 rounded w-20 mx-auto"></div>
-            <div className="h-2 bg-gray-300 rounded w-16 mx-auto"></div>
+            <div className="h-4 bg-gray-400 rounded w-24 mx-auto animate-pulse"></div>
+            <div className="h-3 bg-gray-400 rounded w-20 mx-auto animate-pulse"></div>
           </div>
         </div>
       </div>
@@ -157,21 +176,15 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: isLoading ? 0 : 1 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `url(${actualSrc})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat'
-            }}
+            className="absolute inset-0 bg-gray-50 flex items-center justify-center"
           >
-            {/* Hidden img element for loading detection */}
             <img
               src={actualSrc}
               alt={alt}
-              className="opacity-0 absolute inset-0 w-full h-full"
+              className={`max-w-full max-h-full ${objectFit === 'cover' ? 'w-full h-full object-cover' : 'object-contain'}`}
               onLoad={handleImageLoad}
               onError={handleImageError}
+              style={{ display: isLoading ? 'none' : 'block' }}
             />
           </motion.div>
         )}

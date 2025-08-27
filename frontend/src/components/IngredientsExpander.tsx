@@ -74,9 +74,9 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
   // Cargar ingredientes del producto
   useEffect(() => {
     if (isOpen && productId) {
-      //loadProductIngredients();
-      //loadAvailableIngredients();
-      //loadCategories();
+      loadProductIngredients();
+      loadAvailableIngredients();
+      loadCategories();
     }
   }, [isOpen, productId]);
 
@@ -165,7 +165,7 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
       });
 
       if (response.ok) {
-        //loadProductIngredients();
+        loadProductIngredients();
         setShowAddForm(false);
         return true;
       } else if (response.status === 409) {
@@ -292,13 +292,13 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
                       <div className="flex space-x-2 ml-4">
                         <button
                           onClick={() => acceptAISuggestion(suggestion)}
-                          className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                          className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm hover:shadow-md font-medium"
                         >
                           Aceptar
                         </button>
                         <button
                           onClick={() => setAiSuggestions(prev => prev.filter(s => s.name !== suggestion.name))}
-                          className="px-3 py-1 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400 transition-colors"
+                          className="px-3 py-1.5 bg-gradient-to-r from-gray-500 to-gray-600 text-white text-sm rounded-lg hover:from-gray-600 hover:to-gray-700 transition-all shadow-sm hover:shadow-md font-medium"
                         >
                           Descartar
                         </button>
@@ -362,7 +362,7 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
                       onClick={() => {
                         addIngredientToProduct(ingredient.id, 1, ingredient.unit_abbr, false);
                       }}
-                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                      className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-sm hover:shadow-md font-medium"
                     >
                       Agregar
                     </button>

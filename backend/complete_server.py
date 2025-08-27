@@ -414,7 +414,7 @@ def load_restaurant_data():
         
         # Cargar relaciones producto-ingredientes
         query_product_ingredients = """
-        SELECT pi.product_id, pi.ingredient_id, pi.quantity, pi.unit, pi.is_optional,
+        SELECT pi.product_id, pi.ingredient_id, pi.quantity, pi.unit_name, pi.is_optional,
                i.name as ingredient_name, i.name_en, i.is_allergen, i.allergen_type,
                i.is_vegetarian, i.is_vegan, i.is_gluten_free
         FROM product_ingredients pi
@@ -439,7 +439,7 @@ def load_restaurant_data():
                 'name': pi['ingredient_name'],
                 'name_en': pi['name_en'],
                 'quantity': float(pi['quantity']) if pi['quantity'] else None,
-                'unit': pi['unit'],
+                'unit': pi['unit_name'],
                 'is_optional': bool(pi['is_optional']),
                 'is_allergen': bool(pi['is_allergen']),
                 'allergen_type': pi['allergen_type'],

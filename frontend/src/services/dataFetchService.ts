@@ -38,17 +38,17 @@ class DataFetchService {
         progressClassName: 'bg-green-800',
       });
     } else {
-      // Mensaje cuando viene de la BD
-      toast.info('🔄 Obteniendo información desde la base de datos...\nLas siguientes llamadas se realizarán mucho más rápido', {
-        position: "bottom-center",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: false,
-        className: 'bg-blue-600',
-        progressClassName: 'bg-blue-800',
-      });
+      // Comentado - la notificación era molesta
+      // toast.info('🔄 Obteniendo información desde la base de datos...\nLas siguientes llamadas se realizarán mucho más rápido', {
+      //   position: "bottom-center",
+      //   autoClose: 3000,
+      //   hideProgressBar: false,
+      //   closeOnClick: true,
+      //   pauseOnHover: false,
+      //   draggable: false,
+      //   className: 'bg-blue-600',
+      //   progressClassName: 'bg-blue-800',
+      // });
     }
   }
 
