@@ -739,8 +739,7 @@ export const ProductsDynamic: React.FC = () => {
           
           
           {/* Contenido del formulario */}
-          {
-            <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+          <div className="bg-gray-50 rounded-xl p-6 space-y-4">
               {editingType !== 'product' && (
                 <div className="flex items-center gap-2 mb-4">
                   <Package className="h-5 w-5 text-gray-600" />
@@ -908,7 +907,6 @@ export const ProductsDynamic: React.FC = () => {
               </>
             )}
             </div>
-          )}
 
           {/* Personalización Visual */}
           {(editingType === 'category' || editingType === 'product') && (
@@ -1022,12 +1020,11 @@ export const ProductsDynamic: React.FC = () => {
                   )}
                 </div>
               )}
-            </div>
-          }
+          </div>
 
           {/* Sección de ingredientes integrada (solo para productos) */}
           {editingType === 'product' && (
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 mt-6">
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6">
               <div className="flex items-center gap-2 mb-4">
                 <ChefHat className="h-5 w-5 text-purple-600" />
                 <h4 className="text-lg font-semibold text-gray-800">Ingredientes con IA</h4>
@@ -1044,7 +1041,7 @@ export const ProductsDynamic: React.FC = () => {
           )}
 
           {/* Estado activo */}
-          <div className="flex items-center">
+          <div className="flex items-center mt-6">
             <input
               type="checkbox"
               id="is_active"
