@@ -1058,6 +1058,7 @@ export const ProductsDynamic: React.FC = () => {
                  'Categoría activa'}
               </label>
             </div>
+          </div>
         </div>
       </SlideDrawer>
     );
