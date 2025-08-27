@@ -326,9 +326,13 @@ export const ProductsDynamic: React.FC = () => {
       
       // 🎯 FASE 1: CARGAR IMÁGENES PRIORITARIAS (primera categoría visible)
       console.log(`🎯 FASE 1: Cargando imágenes prioritarias (${priorityProducts.length} productos)`);
+      // En producción (HTTPS), usar proxy para evitar CORS
+      const isProduction = window.location.protocol === 'https:';
       const priorityUrls = priorityProducts
         .filter(p => p.image_url)
-        .map(p => p.image_url!)
+        .map(p => isProduction && p.image_url?.includes('picsum.photos') 
+          ? `${API_BASE_URL}/api/proxy-image?url=${encodeURIComponent(p.image_url!)}` 
+          : p.image_url!)
         .slice(0, 12); // Limitar a los primeros 12 productos visibles
       
       if (priorityUrls.length > 0) {
@@ -367,9 +371,12 @@ export const ProductsDynamic: React.FC = () => {
       
       for (let i = 0; i < products.length; i += batchSize) {
         const batch = products.slice(i, i + batchSize);
+        const isProduction = window.location.protocol === 'https:';
         const batchUrls = batch
           .filter(p => p.image_url)
-          .map(p => p.image_url!);
+          .map(p => isProduction && p.image_url?.includes('picsum.photos')
+            ? `${API_BASE_URL}/api/proxy-image?url=${encodeURIComponent(p.image_url!)}`
+            : p.image_url!);
         
         if (batchUrls.length > 0) {
           console.log(`🔄 Background batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(products.length/batchSize)}: ${batchUrls.length} imágenes`);
@@ -416,9 +423,12 @@ export const ProductsDynamic: React.FC = () => {
   // 🎯 Carga de imágenes específica para una categoría
   const startCategoryImageCaching = async (categoryProducts: Product[]) => {
     try {
+      const isProduction = window.location.protocol === 'https:';
       const categoryUrls = categoryProducts
         .filter(p => p.image_url)
-        .map(p => p.image_url!)
+        .map(p => isProduction && p.image_url?.includes('picsum.photos')
+          ? `${API_BASE_URL}/api/proxy-image?url=${encodeURIComponent(p.image_url!)}`
+          : p.image_url!)
         .slice(0, 15); // Limitar a los primeros 15 productos de la categoría
       
       if (categoryUrls.length === 0) return;
