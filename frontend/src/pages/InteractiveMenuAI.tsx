@@ -418,6 +418,8 @@ export const InteractiveMenuAI: React.FC = () => {
         query_type: data.query_type,
         show_animated_message: data.show_animated_message,
         response: data.response,
+        recommendedProducts: data.recommendedProducts,
+        categorizedProducts: data.categorizedProducts,
         fullData: data
       });
       
@@ -430,6 +432,12 @@ export const InteractiveMenuAI: React.FC = () => {
       // Agregar respuesta de IA
       // 🎯 DETECTAR SI ES CONVERSACIÓN CASUAL PARA MOSTRAR DIFERENTE
       const isCasualConversation = data.query_type === 'greeting' || data.query_type === 'casual_conversation';
+      
+      console.log("💬 TIPO DE CONVERSACIÓN:", {
+        query_type: data.query_type,
+        isCasualConversation,
+        tieneProductos: !!(data.recommendedProducts?.length || data.categorizedProducts)
+      });
       
       // 🎬 VERIFICAR SI HAY MENSAJE DE SALUDO EN LOS PRODUCTOS
       const greetingItem = data.recommendedProducts?.find(item => item.is_greeting);
@@ -495,21 +503,46 @@ export const InteractiveMenuAI: React.FC = () => {
       // Si hay productos recomendados, mostrarlos (pero NO si es conversación casual)
       // Manejar productos categorizados (carruseles) o productos simples
       
-      // Convertir array a objeto si es necesario
+      // Procesar productos recomendados
       let categorizedProds = {};
-      if (Array.isArray(data.categorizedProducts)) {
-        // Si es un array, agruparlo por categoría
-        categorizedProds = data.categorizedProducts.reduce((acc, product) => {
-          const category = product.category || 'General';
-          if (!acc[category]) acc[category] = [];
-          acc[category].push(product);
-          return acc;
-        }, {});
-      } else if (data.categorizedProducts) {
+      let hasMultipleCategories = false;
+      
+      console.log("📦 PROCESANDO PRODUCTOS:", {
+        tieneCategorizedProducts: !!data.categorizedProducts,
+        tieneRecommendedProducts: !!data.recommendedProducts,
+        cantidadRecommended: data.recommendedProducts?.length || 0
+      });
+      
+      // Primero verificar si hay categorizedProducts del backend
+      if (data.categorizedProducts && typeof data.categorizedProducts === 'object' && !Array.isArray(data.categorizedProducts)) {
         categorizedProds = data.categorizedProducts;
+        hasMultipleCategories = Object.keys(categorizedProds).length > 1;
+        console.log("📦 Usando categorizedProducts del backend:", categorizedProds);
+      } 
+      // Si no hay categorizedProducts, procesar recommendedProducts
+      else if (data.recommendedProducts && data.recommendedProducts.length > 0) {
+        // Agrupar productos por categoría
+        const categories = new Set();
+        data.recommendedProducts.forEach(product => {
+          const category = product.category || 'General';
+          categories.add(category);
+          if (!categorizedProds[category]) categorizedProds[category] = [];
+          categorizedProds[category].push(product);
+        });
+        hasMultipleCategories = categories.size > 1;
+        console.log("📦 Agrupando recommendedProducts por categoría:", {
+          categorias: Array.from(categories),
+          hasMultipleCategories,
+          categorizedProds
+        });
       }
       
-      if (!isCasualConversation && categorizedProds && Object.keys(categorizedProds).length > 0) {
+      // Si hay productos, SIEMPRE usar el carrusel categorizado (con auto-expand si es una sola categoría)
+      if (!isCasualConversation && Object.keys(categorizedProds).length > 0) {
+        console.log("🎨 RENDERIZANDO CARRUSEL CATEGORIZADO", {
+          categorias: Object.keys(categorizedProds),
+          esUnaCategoria: Object.keys(categorizedProds).length === 1
+        });
         setTimeout(() => {
           const categorizedStep: ConversationStep = {
             id: (Date.now() + 2).toString(),
@@ -521,7 +554,10 @@ export const InteractiveMenuAI: React.FC = () => {
           setConversationSteps(prev => [...prev, categorizedStep]);
         }, 1000);
         
-      } else if (!isCasualConversation && data.recommendedProducts && data.recommendedProducts.length > 0) {
+      } 
+      // Fallback: Si por alguna razón no se categorizaron pero hay productos
+      else if (!isCasualConversation && data.recommendedProducts && data.recommendedProducts.length > 0) {
+        console.log("🎨 RENDERIZANDO PRODUCTOS SIMPLES (FALLBACK)");
         setTimeout(() => {
           const productsStep: ConversationStep = {
             id: (Date.now() + 2).toString(),
@@ -858,6 +894,9 @@ export const InteractiveMenuAI: React.FC = () => {
                 >
                   <ul>
                     {Object.entries(step.categorizedProducts).map(([category, products], categoryIndex) => {
+                      // Si hay solo una categoría, expandirla automáticamente
+                      const isSingleCategory = Object.keys(step.categorizedProducts).length === 1;
+                      const shouldAutoExpand = isSingleCategory || categoryIndex === 0;
                       const categoryEmoji = 
                         category === 'Carnes' ? '🥩' : 
                         category === 'Pastas' ? '🍝' : 
@@ -868,7 +907,7 @@ export const InteractiveMenuAI: React.FC = () => {
                         category === 'Entradas' ? '🥘' : '🍽️';
                       
                       return (
-                        <li key={category}>
+                        <li key={category} className={shouldAutoExpand ? 'auto-expanded' : ''}>
                           {/* Header de Categoría */}
                           <div className="category-title">
                             <span className="text-5xl mr-4">{categoryEmoji}</span>
