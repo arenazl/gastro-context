@@ -43,6 +43,7 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
 
     // Verificar primero si la imagen está en cache
     imageCacheService.isImageCached(imageToLoad).then(async (inCache) => {
+
       if (inCache) {
         // Si está en cache, cargar inmediatamente desde el caché
         console.log(`🎯 Image from cache: ${imageToLoad}`);
@@ -80,9 +81,10 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
       if (imgRef.current) {
         observer.observe(imgRef.current);
       }
-      
+
       return () => observer.disconnect();
     });
+
     // Cleanup blob URLs
     return () => {
       if (blobUrlRef.current && blobUrlRef.current.startsWith('blob:')) {
@@ -111,14 +113,14 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
     <div className={`relative overflow-hidden bg-gray-200 ${className} ${skeletonClassName}`}>
       {/* Animated shimmer effect */}
       <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse">
-        <div 
+        <div
           className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-50 transform -skew-x-12 animate-shimmer"
           style={{
             animation: 'shimmer 1.5s ease-in-out infinite'
           }}
         />
       </div>
-      
+
       {/* Content placeholder */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
@@ -134,7 +136,7 @@ export const ImageWithSkeleton: React.FC<ImageWithSkeletonProps> = ({
 
   return (
     <div ref={imgRef} className={`relative ${className}`}>
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {/* Skeleton loader */}
         {(isLoading || !shouldLoad) && (
           <motion.div

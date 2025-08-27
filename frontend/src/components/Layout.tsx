@@ -146,9 +146,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Disclosure.Panel className="sm:hidden">
               <div className="space-y-1 pb-3 pt-2">
                 {filteredNavigation.map((item) => (
-                  <Disclosure.Button
+                  <Link
                     key={item.name}
-                    as={Link}
                     to={item.href}
                     className={classNames(
                       location.pathname === item.href
@@ -158,7 +157,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     )}
                   >
                     {item.name}
-                  </Disclosure.Button>
+                  </Link>
                 ))}
               </div>
               <div className="border-t border-gray-200 pb-3 pt-4">
@@ -175,22 +174,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
                 <div className="mt-3 space-y-1">
                   {userNavigation.map((item) => (
-                    <Disclosure.Button
+                    <Link
                       key={item.name}
-                      as={Link}
                       to={item.href}
                       className="block px-4 py-2 text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                     >
                       {item.name}
-                    </Disclosure.Button>
+                    </Link>
                   ))}
-                  <Disclosure.Button
-                    as="button"
+                  <button
                     onClick={handleLogout}
                     className="block w-full px-4 py-2 text-left text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                   >
                     Sign out
-                  </Disclosure.Button>
+                  </button>
                 </div>
               </div>
             </Disclosure.Panel>

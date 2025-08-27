@@ -144,6 +144,10 @@ class ImageCacheService {
   }
 
   async getCachedImage(url: string): Promise<Response | null> {
+    // DISABLED to prevent flickering
+    return null;
+    
+    /*
     if (!this.cache) await this.init();
     if (!this.cache) return null;
 
@@ -158,9 +162,14 @@ class ImageCacheService {
     }
     
     return null;
+    */
   }
 
   async getCachedImageUrl(url: string): Promise<string> {
+    // DISABLED to prevent flickering
+    return url;
+    
+    /*
     const cachedResponse = await this.getCachedImage(url);
     
     if (cachedResponse) {
@@ -171,6 +180,7 @@ class ImageCacheService {
     }
     
     return url;
+    */
   }
 
   async isImageCached(url: string): Promise<boolean> {

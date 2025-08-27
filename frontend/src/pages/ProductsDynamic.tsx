@@ -536,7 +536,7 @@ export const ProductsDynamic: React.FC = () => {
         console.log('Guardado exitosamente:', result);
         // Invalidar caché
         localStorage.removeItem('products_cache');
-        await loadData();
+        await loadInitialData();
         setEditingItem(null);
         setEditingType(null);
       } else {
@@ -548,7 +548,7 @@ export const ProductsDynamic: React.FC = () => {
       console.error('Error:', error);
       alert(`Error al guardar: ${error.message}`);
     }
-  }, [editingItem, editingType, loadData]);
+  }, [editingItem, editingType, selectedCategory, selectedSubcategory]);
 
   const handleDelete = async (id: number, type: 'category' | 'subcategory' | 'product') => {
     if (!confirm('¿Estás seguro de eliminar?')) return;
@@ -565,7 +565,7 @@ export const ProductsDynamic: React.FC = () => {
       if (response.ok) {
         // Invalidar caché
         localStorage.removeItem('products_cache');
-        await loadData();
+        await loadInitialData();
       } else {
       }
     } catch (error) {
@@ -626,7 +626,8 @@ export const ProductsDynamic: React.FC = () => {
   };
 
   // Slide Drawer para edición con breadcrumb dinámico
-  const EditDrawer = useCallback(() => {
+  const EditDrawer = () => {
+    console.log('🚨 EditDrawer re-renderizado!', { editingItem, editingType });
     if (!editingItem || !editingType) return null;
 
     // Construir breadcrumb según el contexto
@@ -739,8 +740,7 @@ export const ProductsDynamic: React.FC = () => {
           
           
           {/* Contenido del formulario */}
-          {
-            <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+          <div className="bg-gray-50 rounded-xl p-6 space-y-4">
               {editingType !== 'product' && (
                 <div className="flex items-center gap-2 mb-4">
                   <Package className="h-5 w-5 text-gray-600" />
@@ -756,8 +756,15 @@ export const ProductsDynamic: React.FC = () => {
                   type="text"
                   value={editingItem?.name || ''}
                   onChange={(e) => {
+                    console.log('🔥 NOMBRE onChange:', e.target.value);
+                    console.log('🔥 editingItem antes:', editingItem);
                     const newValue = e.target.value;
-                    setEditingItem(prev => ({ ...prev, name: newValue }));
+                    setEditingItem(prev => {
+                      console.log('🔥 setEditingItem prev:', prev);
+                      const newItem = { ...prev, name: newValue };
+                      console.log('🔥 setEditingItem new:', newItem);
+                      return newItem;
+                    });
                   }}
                   className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder={`Nombre del ${editingType === 'category' ? 'categoría' : editingType === 'subcategory' ? 'subcategoría' : 'producto'}`}
@@ -907,7 +914,7 @@ export const ProductsDynamic: React.FC = () => {
                 </div>
               </>
             )}
-            </div>
+          </div>
 
           {/* Personalización Visual */}
           {(editingType === 'category' || editingType === 'product') && (
@@ -1063,7 +1070,7 @@ export const ProductsDynamic: React.FC = () => {
         </div>
       </SlideDrawer>
     );
-  }, [editingItem, editingType, categories, subcategories, selectedCategory, addressSearch, addressSuggestions, handleSave]);
+  };
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, SparklesIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Wand2 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api.js';
 
 interface Ingredient {
@@ -73,9 +74,9 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
   // Cargar ingredientes del producto
   useEffect(() => {
     if (isOpen && productId) {
-      loadProductIngredients();
-      loadAvailableIngredients();
-      loadCategories();
+      //loadProductIngredients();
+      //loadAvailableIngredients();
+      //loadCategories();
     }
   }, [isOpen, productId]);
 
@@ -123,7 +124,7 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
 
   const getAISuggestions = async () => {
     if (!productName) return;
-    
+
     setIsLoadingAI(true);
     try {
       const params = new URLSearchParams({
@@ -164,7 +165,7 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
       });
 
       if (response.ok) {
-        loadProductIngredients();
+        //loadProductIngredients();
         setShowAddForm(false);
         return true;
       } else if (response.status === 409) {
@@ -178,7 +179,7 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
 
   const acceptAISuggestion = async (suggestion: AISuggestion) => {
     // Buscar el ingrediente en la lista disponible
-    const ingredient = availableIngredients.find(ing => 
+    const ingredient = availableIngredients.find(ing =>
       ing.name.toLowerCase().includes(suggestion.name.toLowerCase()) ||
       suggestion.name.toLowerCase().includes(ing.name.toLowerCase())
     );
@@ -247,17 +248,17 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
             <button
               onClick={getAISuggestions}
               disabled={isLoadingAI}
-              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 transition-all font-medium"
             >
-              <SparklesIcon className="h-4 w-4" />
-              <span>{isLoadingAI ? 'Generando...' : 'Sugerir con IA'}</span>
+              <Wand2 className="h-4 w-4" />
+              <span className="text-sm">{isLoadingAI ? 'Generando...' : 'Sugerir con IA'}</span>
             </button>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-xl hover:from-green-700 hover:to-teal-700 transition-all font-medium"
             >
               <PlusIcon className="h-4 w-4" />
-              <span>Agregar Ingrediente</span>
+              <span className="text-sm">Agregar Manual</span>
             </button>
           </div>
 
@@ -321,7 +322,7 @@ export const IngredientsExpander: React.FC<IngredientsExpanderProps> = ({
                   <XMarkIcon className="h-5 w-5" />
                 </button>
               </div>
-              
+
               {/* Buscador de ingredientes */}
               <div className="mb-4">
                 <input
