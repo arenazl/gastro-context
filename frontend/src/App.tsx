@@ -9,6 +9,7 @@ import { CollapsibleLayout as Layout } from './components/CollapsibleLayout';
 import { LoginModern as Login } from './pages/LoginModern';
 import { DashboardModern as Dashboard } from './pages/DashboardModern';
 import { TablesVisual } from './pages/TablesVisual';
+import { Tables3D } from './pages/Tables3D';
 import { NewOrderWithCache } from './pages/NewOrderWithCache';
 import { KitchenKanban as Kitchen } from './pages/KitchenKanban';
 import { KitchenDragDrop } from './pages/KitchenDragDrop';
@@ -86,6 +87,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <TablesVisual />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tables3d"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Tables3D />
                 </Layout>
               </ProtectedRoute>
             }

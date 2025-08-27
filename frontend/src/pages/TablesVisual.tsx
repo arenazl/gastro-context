@@ -174,7 +174,7 @@ export const TablesVisual: React.FC = () => {
 
   const GridView = () => (
     <div className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
         {tables.filter(t => t.type !== 'decoration').map(table => {
           const statusConfig = {
             available: {
@@ -221,48 +221,79 @@ export const TablesVisual: React.FC = () => {
             <div
               key={table.id}
               onClick={() => handleTableClick(table.id)}
-              className={`relative group cursor-pointer transition-all duration-300 hover:transform hover:-translate-y-1`}
+              className={`relative group cursor-pointer transition-all duration-300 hover:scale-105`}
             >
-              <div className={`${config.bgColor} border-2 ${config.borderColor} rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all`}>
-                {/* Header */}
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">Mesa {table.number}</h3>
-                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                      <Users className="h-3 w-3" />
-                      {table.capacity} personas
-                    </p>
+              <div className={`relative overflow-hidden border ${config.borderColor} rounded-xl shadow-lg hover:shadow-2xl transition-all bg-white`}>
+                {/* Gradient overlay basado en estado */}
+                <div className={`absolute inset-0 opacity-10 ${config.bgColor}`} />
+                <div className="relative p-4">
+                  {/* Status indicator bar */}
+                  <div className={`absolute top-0 left-0 right-0 h-1 ${config.buttonBg}`} />
+                  
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="text-2xl font-bold bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">Mesa {table.number}</h3>
+                      <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        Capacidad: {table.capacity}
+                      </p>
+                    </div>
+                    <div className={`${config.iconBg} ${config.iconColor} p-3 rounded-xl shadow-sm`}>
+                      {config.icon}
+                    </div>
                   </div>
-                  <div className={`${config.iconBg} ${config.iconColor} p-2 rounded-full`}>
-                    {config.icon}
+
+                  {/* Status Badge con animación */}
+                  <div className="mb-3">
+                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                      config.iconBg
+                    } ${config.iconColor} ${
+                      table.status === 'occupied' ? 'animate-pulse' : ''
+                    }`}>
+                      {table.status === 'occupied' && (
+                        <span className="flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </span>
+                      )}
+                      {config.label}
+                    </span>
                   </div>
-                </div>
 
-                {/* Status Badge */}
-                <div className="mb-4">
-                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
-                    config.iconBg
-                  } ${config.iconColor}`}>
-                    {config.label}
-                  </span>
-                </div>
-
-                {/* Mesa visual pequeña */}
-                <div className="mb-4 flex justify-center">
-                  <div className={`w-16 h-16 ${
-                    table.shape === 'circle' ? 'rounded-full' : 
-                    table.shape === 'rectangle' ? 'rounded-lg w-20' : 'rounded-lg'
-                  } bg-gradient-to-br from-amber-700 to-amber-900 shadow-md border-2 border-amber-800 flex items-center justify-center text-white font-bold`}>
-                    {table.number}
+                  {/* Mesa visual mejorada */}
+                  <div className="mb-4 flex justify-center">
+                    <div className="relative">
+                      <div className={`w-20 h-20 ${
+                        table.shape === 'circle' ? 'rounded-full' : 
+                        table.shape === 'rectangle' ? 'rounded-lg w-24' : 'rounded-lg'
+                      } bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800 shadow-xl flex items-center justify-center text-white font-bold text-2xl transform transition-transform group-hover:rotate-3`}>
+                        {table.number}
+                      </div>
+                      {/* Sombra de la mesa */}
+                      <div className={`absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-16 h-3 bg-black opacity-20 blur-md ${
+                        table.shape === 'circle' ? 'rounded-full' : 'rounded-lg'
+                      }`} />
+                    </div>
                   </div>
-                </div>
 
-                {/* Action Button */}
-                {(table.status === 'available' || table.status === 'occupied') && (
-                  <button className={`w-full py-2.5 px-4 ${config.buttonBg} text-white rounded-xl font-medium transition-all transform hover:scale-105 shadow-md hover:shadow-lg`}>
-                    {table.status === 'occupied' ? 'Ver Orden' : 'Nueva Orden'}
-                  </button>
-                )}
+                  {/* Action Button mejorado */}
+                  {(table.status === 'available' || table.status === 'occupied') && (
+                    <button className={`w-full py-3 px-4 ${config.buttonBg} text-white rounded-lg font-semibold transition-all transform hover:scale-[1.02] shadow-md hover:shadow-xl flex items-center justify-center gap-2`}>
+                      {table.status === 'occupied' ? (
+                        <>
+                          <Eye className="h-4 w-4" />
+                          Ver Orden
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Nueva Orden
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );

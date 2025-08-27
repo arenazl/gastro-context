@@ -141,6 +141,7 @@ export const NewOrderWithCache: React.FC = () => {
   const [showOrdersPanel, setShowOrdersPanel] = useState(false);
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
   const [activeSection, setActiveSection] = useState<'cart' | 'payment' | 'cash'>('cart');
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
 
   // Cargar datos iniciales (solo categorías y mesas)
@@ -1301,7 +1302,9 @@ export const NewOrderWithCache: React.FC = () => {
                         // Si estamos abriendo el carrito, volver a la sección del carrito
                         if (cartCollapsed) {
                           setActiveSection('cart');
+                          setActiveCartTab('items');
                           setPaymentOpen(false);
+                          setShowPaymentOptions(false);
                         }
                       }}
                     >
@@ -1506,12 +1509,16 @@ export const NewOrderWithCache: React.FC = () => {
                       <motion.button
                         onClick={() => {
                           // Toggle entre cart y payment
-                          if (activeSection === 'cart') {
+                          if (activeCartTab === 'items') {
+                            setActiveCartTab('payment');
                             setActiveSection('payment');
                             setPaymentOpen(true);
+                            setShowPaymentOptions(true);
                           } else {
+                            setActiveCartTab('items');
                             setActiveSection('cart');
                             setPaymentOpen(false);
+                            setShowPaymentOptions(false);
                           }
                         }}
                         className="w-full py-2 px-3 text-white font-semibold rounded-lg shadow transition-all"
@@ -1537,7 +1544,7 @@ export const NewOrderWithCache: React.FC = () => {
                               {activeCartTab === 'payment' ? (
                                 <>
                                   <ChevronUpIcon className="h-3 w-3" />
-                                  <span>SELECCIONAR PAGO</span>
+                                  <span>OCULTAR OPCIONES DE PAGO</span>
                                 </>
                               ) : (
                                 <>
@@ -1615,10 +1622,9 @@ export const NewOrderWithCache: React.FC = () => {
                                 </motion.button>
 
                                 <motion.button
-                                  className="w-full p-4 rounded-lg border-2 flex items-center justify-between hover:border-purple-500 transition-colors"
+                                  className="w-full p-4 rounded-lg border-2 flex items-center justify-between hover:border-purple-500 transition-colors bg-gradient-to-r from-blue-50 to-purple-50"
                                   style={{ 
-                                    backgroundColor: theme.colors.surface,
-                                    borderColor: theme.colors.border
+                                    borderColor: '#00B1EA'
                                   }}
                                   whileHover={{ scale: 1.02 }}
                                   whileTap={{ scale: 0.98 }}
@@ -1694,10 +1700,15 @@ export const NewOrderWithCache: React.FC = () => {
                                   }}
                                 >
                                   <div className="flex items-center gap-3">
-                                    <span className="text-2xl">📱</span>
-                                    <span className="font-medium">MercadoPago</span>
+                                    <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                                      <span className="text-white text-xl font-bold">MP</span>
+                                    </div>
+                                    <div className="flex flex-col items-start">
+                                      <span className="font-semibold text-blue-700">MercadoPago</span>
+                                      <span className="text-xs text-gray-500">Paga con QR, tarjeta o transferencia</span>
+                                    </div>
                                   </div>
-                                  <ChevronRightIcon className="h-5 w-5" style={{ color: theme.colors.textMuted }} />
+                                  <ChevronRightIcon className="h-5 w-5 text-blue-500" />
                                 </motion.button>
                         </div>
                       </div>
@@ -1769,7 +1780,9 @@ export const NewOrderWithCache: React.FC = () => {
                                 setSelectedAddress(null);
                                 setOrderNumber(prev => prev + 1);
                                 setActiveSection('cart');
+                                setActiveCartTab('items');
                                 setPaymentOpen(false);
+                                setShowPaymentOptions(false);
                                 
                                 // Notificar a la cocina mediante WebSocket si está disponible
                                 if (window.kitchenSocket && window.kitchenSocket.readyState === WebSocket.OPEN) {
