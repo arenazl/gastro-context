@@ -1020,6 +1020,7 @@ export const ProductsDynamic: React.FC = () => {
                   )}
                 </div>
               )}
+            </div>
 
             {/* Sección de ingredientes integrada (solo para productos) */}
             {editingType === 'product' && (
