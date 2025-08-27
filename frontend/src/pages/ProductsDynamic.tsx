@@ -35,13 +35,12 @@ import {
 import { toast } from 'react-toastify';
 import { PageHeader } from '../components/PageHeader';
 import { SlideDrawer } from '../components/SlideDrawer';
+import { ImageWithSkeleton } from '../components/ImageWithSkeleton';
 import { IngredientsExpander } from '../components/IngredientsExpander';
 import { motion, AnimatePresence } from 'framer-motion';
 import { styles, getListItemClasses, combineClasses } from '../styles/SharedStyles';
 import dataFetchService from '../services/dataFetchService';
-import imageCache from '../services/imageCache';
 import { imageCacheService } from '../services/imageCache.service';
-import LazyImage from '../components/LazyImage';
 import { checkBrowserCapabilities, getAvailableStorageOptions } from '../utils/browserCapabilities';
 
 
@@ -139,7 +138,6 @@ export const ProductsDynamic: React.FC = () => {
   // Estados para edición
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editingType, setEditingType] = useState<'category' | 'subcategory' | 'product' | null>(null);
-  const [categoryImagesLoading, setCategoryImagesLoading] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -400,9 +398,7 @@ export const ProductsDynamic: React.FC = () => {
 
 
   // Función para cambiar de categoría con carga inteligente de imágenes
-  const handleCategoryChange = async (categoryId: number) => {
-    if (selectedCategory === categoryId) return;
-    
+  const handleCategoryChange = (categoryId: number) => {
     setSelectedCategory(categoryId);
     
     // Los datos ya están en cache desde el request inicial
@@ -411,47 +407,47 @@ export const ProductsDynamic: React.FC = () => {
     
     setProducts(categoryProducts);
     setSubcategories(categorySubcategories);
-    setCategoryImagesLoading(true);
     
-    // Precargar imágenes de la categoría seleccionada
+    // 🎯 Cargar imágenes de la nueva categoría si no están cacheadas
     if (categoryProducts.length > 0) {
-      const imageUrls = categoryProducts
-        .filter(p => p.image_url)
-        .map(p => p.image_url!);
+      console.log(`🔄 Categoría cambiada a: ${categories.find(c => c.id === categoryId)?.name}`);
+      console.log(`📋 Verificando cache de imágenes para ${categoryProducts.length} productos`);
       
-      // Precargar en paralelo pero sin bloquear el UI
-      imageCache.preloadCategoryImages(categoryId, imageUrls)
-        .finally(() => setCategoryImagesLoading(false));
-    } else {
-      setCategoryImagesLoading(false);
+      // Cargar imágenes de esta categoría con prioridad media (después de 500ms)
+      setTimeout(() => {
+        startCategoryImageCaching(categoryProducts);
+      }, 500);
     }
   };
 
   // 🎯 Carga de imágenes específica para una categoría
   const startCategoryImageCaching = async (categoryProducts: Product[]) => {
     try {
-      const imageUrls = categoryProducts
+      const isProduction = window.location.protocol === 'https:';
+      const categoryUrls = categoryProducts
         .filter(p => p.image_url)
-        .map(p => p.image_url!)
+        .map(p => isProduction && p.image_url?.includes('picsum.photos')
+          ? `${API_BASE_URL}/api/proxy-image?url=${encodeURIComponent(p.image_url!)}`
+          : p.image_url!)
         .slice(0, 15); // Limitar a los primeros 15 productos de la categoría
       
-      if (imageUrls.length === 0) return;
+      if (categoryUrls.length === 0) return;
       
       // Verificar cuántas imágenes ya están cacheadas
       let alreadyCached = 0;
-      for (const url of imageUrls) {
-        const isCached = imageCache.isImageCached(url);
+      for (const url of categoryUrls) {
+        const isCached = await imageCacheService.isImageCached(url);
         if (isCached) alreadyCached++;
       }
       
-      const needToCacheCount = imageUrls.length - alreadyCached;
+      const needToCacheCount = categoryUrls.length - alreadyCached;
       
       if (needToCacheCount > 0) {
         console.log(`🎯 Cacheando ${needToCacheCount} imágenes nuevas de categoría (${alreadyCached} ya en cache)`);
         
         // Filtrar solo las URLs que no están cacheadas
         const urlsToCache = [];
-        for (const url of imageUrls) {
+        for (const url of categoryUrls) {
           const isCached = await imageCacheService.isImageCached(url);
           if (!isCached) {
             urlsToCache.push(url);
@@ -1043,11 +1039,12 @@ export const ProductsDynamic: React.FC = () => {
                     <div className="mt-4">
                       <p className="text-sm font-medium text-gray-700 mb-2">Vista previa</p>
                       <div className="relative w-full h-48 bg-gray-100 rounded-xl overflow-hidden">
-                        <LazyImage
-                          src={editingItem.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'}
+                        <ImageWithSkeleton
+                          src={editingItem.image_url}
                           alt="Vista previa del producto"
-                          className="w-full h-full object-cover rounded-xl"
-                          priority={true}
+                          fallbackSrc="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"
+                          className="w-full h-full rounded-xl"
+                          skeletonClassName="rounded-xl"
                         />
                       </div>
                     </div>
@@ -1510,11 +1507,17 @@ export const ProductsDynamic: React.FC = () => {
                   >
                     {/* Imagen de fondo con gradiente */}
                     <div className="h-32 relative">
-                      <LazyImage
-                        src={product.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'}
+                      <ImageWithSkeleton
+                        src={product.image_url}
                         alt={product.name}
-                        className="w-full h-full object-cover rounded-t-xl"
-                        priority={index < 6}
+                        fallbackSrc="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"
+                        className="w-full h-full rounded-t-xl"
+                        onLoad={() => {
+                          // console.log(`Image loaded for product: ${product.name}`);
+                        }}
+                        onError={() => {
+                          // console.log(`Image failed to load for product: ${product.name}`);
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                       {/* Badge de disponibilidad */}
