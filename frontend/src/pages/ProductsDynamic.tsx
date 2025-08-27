@@ -125,7 +125,7 @@ export const ProductsDynamic: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Estados para el modal de productos con pestañas
-  const [activeProductTab, setActiveProductTab] = useState<'general' | 'ingredients'>('general');
+  // Removido: Ya no necesitamos tabs, todo está en un solo formulario
   
   // Estados para la barra superior
   const [orderType, setOrderType] = useState<'dine-in' | 'takeout' | 'delivery'>('dine-in');
@@ -737,38 +737,9 @@ export const ProductsDynamic: React.FC = () => {
             </div>
           )}
           
-          {/* Pestañas para productos */}
-          {editingType === 'product' && (
-            <div className="border-b border-gray-200">
-              <nav className="flex space-x-8" aria-label="Tabs">
-                <button
-                  onClick={() => setActiveProductTab('general')}
-                  className={`py-3 px-1 border-b-2 font-medium text-sm ${
-                    activeProductTab === 'general'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <Package className="inline h-4 w-4 mr-2" />
-                  Información General
-                </button>
-                <button
-                  onClick={() => setActiveProductTab('ingredients')}
-                  className={`py-3 px-1 border-b-2 font-medium text-sm ${
-                    activeProductTab === 'ingredients'
-                      ? 'border-purple-500 text-purple-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <ChefHat className="inline h-4 w-4 mr-2" />
-                  Ingredientes
-                </button>
-              </nav>
-            </div>
-          )}
           
-          {/* Contenido de pestaña Información General */}
-          {(editingType !== 'product' || activeProductTab === 'general') && (
+          {/* Contenido del formulario */}
+          {
             <div className="bg-gray-50 rounded-xl p-6 space-y-4">
               {editingType !== 'product' && (
                 <div className="flex items-center gap-2 mb-4">
@@ -1052,11 +1023,15 @@ export const ProductsDynamic: React.FC = () => {
                 </div>
               )}
             </div>
-          )}
+          }
 
-          {/* Pestaña de ingredientes */}
-          {editingType === 'product' && activeProductTab === 'ingredients' && (
-            <div className="bg-gray-50 rounded-xl p-6">
+          {/* Sección de ingredientes integrada (solo para productos) */}
+          {editingType === 'product' && (
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <ChefHat className="h-5 w-5 text-purple-600" />
+                <h4 className="text-lg font-semibold text-gray-800">Ingredientes con IA</h4>
+              </div>
               <IngredientsExpander
                 productId={editingItem?.id || 0}
                 productName={editingItem?.name || ''}
@@ -1545,7 +1520,6 @@ export const ProductsDynamic: React.FC = () => {
                           onClick={() => {
                             setEditingItem(product);
                             setEditingType('product');
-                            setActiveProductTab('general'); // Resetear a pestaña general
                           }}
                           className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
                         >
