@@ -1257,6 +1257,99 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/tables':
             tables = get_cached_or_fetch('tables', self.get_tables_data)
             self.send_json_response(tables)
+        
+        # Objetos decorativos del restaurante
+        elif path == '/api/decorative-objects':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                # Primero crear tabla si no existe
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS decorative_objects (
+                        id VARCHAR(50) PRIMARY KEY,
+                        type VARCHAR(50) NOT NULL,
+                        x INT NOT NULL DEFAULT 0,
+                        y INT NOT NULL DEFAULT 0,
+                        width INT NOT NULL DEFAULT 50,
+                        height INT NOT NULL DEFAULT 50,
+                        rotation INT NOT NULL DEFAULT 0,
+                        locked BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    )
+                """)
+                connection.commit()
+                
+                cursor.execute("SELECT * FROM decorative_objects ORDER BY y, x")
+                objects = cursor.fetchall()
+                self.send_json_response(objects)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo objetos decorativos: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # Layouts guardados del restaurante
+        elif path == '/api/layouts':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                # Crear tabla si no existe
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS restaurant_layouts (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        description TEXT,
+                        layout_data JSON,
+                        is_active BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    )
+                """)
+                connection.commit()
+                
+                cursor.execute("SELECT * FROM restaurant_layouts ORDER BY is_active DESC, created_at DESC")
+                layouts = cursor.fetchall()
+                self.send_json_response(layouts)
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo layouts: {e}")
+                self.send_json_response([])
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
+        
+        # Layout activo del restaurante
+        elif path == '/api/layouts/active':
+            connection = None
+            cursor = None
+            try:
+                connection = connection_pool.get_connection()
+                cursor = connection.cursor(dictionary=True)
+                
+                cursor.execute("SELECT * FROM restaurant_layouts WHERE is_active = TRUE LIMIT 1")
+                layout = cursor.fetchone()
+                
+                if layout and layout.get('layout_data'):
+                    import json
+                    layout['layout_data'] = json.loads(layout['layout_data']) if isinstance(layout['layout_data'], str) else layout['layout_data']
+                
+                self.send_json_response(layout or {})
+                
+            except Exception as e:
+                logger.error(f"Error obteniendo layout activo: {e}")
+                self.send_json_response({})
+            finally:
+                if cursor: cursor.close()
+                if connection: connection.close()
             
         # Órdenes activas para el panel superior
         elif path == '/api/orders/active':
@@ -1625,6 +1718,15 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({'success': True, 'message': 'Tabla corregida', 'details': result})
             except Exception as e:
                 logger.error(f"Error corrigiendo tabla: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Endpoint para crear tabla de mesas
+        elif path == '/api/create-tables-table':
+            try:
+                result = self.create_tables_table()
+                self.send_json_response({'success': True, 'message': 'Tabla de mesas creada', 'details': result})
+            except Exception as e:
+                logger.error(f"Error creando tabla de mesas: {e}")
                 self.send_error_response(500, str(e))
         
         # Reportes - Ventas
@@ -2154,6 +2256,196 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                     cursor.close()
                 if connection:
                     connection.close()
+        
+        # === ENDPOINTS POST DE TABLES ===
+        elif path == '/api/tables':
+            # Crear nueva mesa
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Insertar nueva mesa
+                    query = """
+                    INSERT INTO tables (number, capacity, location, status, x, y, width, height, rotation, shape)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    params = (
+                        data.get('number'),
+                        data.get('capacity', 4),
+                        data.get('location', 'Main'),
+                        data.get('status', 'available'),
+                        data.get('x', 100),
+                        data.get('y', 100),
+                        data.get('width', 80),
+                        data.get('height', 80),
+                        data.get('rotation', 0),
+                        data.get('shape', 'square')
+                    )
+                    cursor.execute(query, params)
+                    connection.commit()
+                    
+                    # Obtener el ID de la mesa creada
+                    table_id = cursor.lastrowid
+                    
+                    # Limpiar caché
+                    CACHE['tables'] = None
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'table_id': table_id,
+                        'message': f'Mesa {data.get("number")} creada exitosamente'
+                    })
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Error creando mesa: {e}")
+                self.send_error_response(500, str(e))
+        
+        # === ENDPOINTS POST DE OBJETOS DECORATIVOS Y LAYOUTS ===
+        
+        # Crear o actualizar objeto decorativo
+        elif path == '/api/decorative-objects':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                connection = None
+                cursor = None
+                
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Crear tabla si no existe
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS decorative_objects (
+                            id VARCHAR(50) PRIMARY KEY,
+                            type VARCHAR(50) NOT NULL,
+                            x INT NOT NULL DEFAULT 0,
+                            y INT NOT NULL DEFAULT 0,
+                            width INT NOT NULL DEFAULT 50,
+                            height INT NOT NULL DEFAULT 50,
+                            rotation INT NOT NULL DEFAULT 0,
+                            locked BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        )
+                    """)
+                    
+                    # Insertar o actualizar objeto
+                    query = """
+                        INSERT INTO decorative_objects (id, type, x, y, width, height, rotation, locked)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                        x = VALUES(x), y = VALUES(y), width = VALUES(width), 
+                        height = VALUES(height), rotation = VALUES(rotation), locked = VALUES(locked)
+                    """
+                    
+                    params = (
+                        data.get('id'),
+                        data.get('type'),
+                        data.get('x', 0),
+                        data.get('y', 0),
+                        data.get('width', 50),
+                        data.get('height', 50),
+                        data.get('rotation', 0),
+                        data.get('locked', False)
+                    )
+                    cursor.execute(query, params)
+                    connection.commit()
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'message': 'Objeto decorativo guardado'
+                    })
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Error guardando objeto decorativo: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Guardar layout completo
+        elif path == '/api/layouts':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data)
+                connection = None
+                cursor = None
+                
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    # Crear tabla si no existe
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS restaurant_layouts (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            name VARCHAR(100) NOT NULL,
+                            description TEXT,
+                            layout_data JSON,
+                            is_active BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        )
+                    """)
+                    
+                    # Guardar layout
+                    layout_data_json = json.dumps(data.get('layout_data', {}))
+                    
+                    query = """
+                        INSERT INTO restaurant_layouts (name, description, layout_data, is_active)
+                        VALUES (%s, %s, %s, %s)
+                    """
+                    
+                    params = (
+                        data.get('name', f'Layout {data.get("timestamp", "")}'),
+                        data.get('description', ''),
+                        layout_data_json,
+                        data.get('is_active', False)
+                    )
+                    cursor.execute(query, params)
+                    
+                    # Si este layout es activo, desactivar los demás
+                    if data.get('is_active', False):
+                        layout_id = cursor.lastrowid
+                        cursor.execute("""
+                            UPDATE restaurant_layouts 
+                            SET is_active = FALSE 
+                            WHERE id != %s
+                        """, (layout_id,))
+                    
+                    connection.commit()
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'layout_id': cursor.lastrowid,
+                        'message': 'Layout guardado exitosamente'
+                    })
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Error guardando layout: {e}")
+                self.send_error_response(500, str(e))
         
         # === ENDPOINTS POST DE INGREDIENTES ===
         
@@ -3680,7 +3972,54 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         """Handle DELETE requests"""
         path = urlparse(self.path).path
         
-        if path.startswith('/api/addresses/'):
+        # Eliminar objeto decorativo
+        if path.startswith('/api/decorative-objects/'):
+            try:
+                object_id = path.split('/')[-1]
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = "DELETE FROM decorative_objects WHERE id = %s"
+                    cursor.execute(query, (object_id,))
+                    connection.commit()
+                    
+                    self.send_json_response({'success': True, 'deleted': object_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando objeto decorativo: {e}")
+                self.send_error_response(500, str(e))
+        
+        # Eliminar mesa
+        elif path.startswith('/api/tables/'):
+            try:
+                table_id = int(path.split('/')[-1])
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = "DELETE FROM tables WHERE id = %s"
+                    cursor.execute(query, (table_id,))
+                    connection.commit()
+                    
+                    # Limpiar caché
+                    CACHE['tables'] = None
+                    
+                    self.send_json_response({'success': True, 'deleted': table_id})
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+            except Exception as e:
+                logger.error(f"Error eliminando mesa: {e}")
+                self.send_error_response(500, str(e))
+        
+        elif path.startswith('/api/addresses/'):
             # Delete address
             try:
                 address_id = int(path.split('/')[-1])
@@ -4503,6 +4842,59 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Error creando configuraciones de empresa: {e}")
             return False
+    
+    def create_tables_table(self):
+        """Create tables table if it doesn't exist"""
+        try:
+            # Crear tabla si no existe
+            create_query = """
+            CREATE TABLE IF NOT EXISTS tables (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                number INT NOT NULL UNIQUE,
+                capacity INT NOT NULL DEFAULT 4,
+                location VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'available',
+                x INT DEFAULT 0,
+                y INT DEFAULT 0,
+                width INT DEFAULT 100,
+                height INT DEFAULT 100,
+                rotation INT DEFAULT 0,
+                shape VARCHAR(20) DEFAULT 'square',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            
+            result = execute_mysql_query_with_recovery(create_query)
+            
+            # Insertar mesas de ejemplo
+            insert_query = """
+            INSERT IGNORE INTO tables (number, capacity, location, status, x, y, shape) VALUES
+            (1, 4, 'Window', 'available', 20, 20, 'square'),
+            (2, 2, 'Center', 'occupied', 40, 20, 'round'),
+            (3, 6, 'Corner', 'available', 60, 20, 'square'),
+            (4, 4, 'Window', 'reserved', 20, 40, 'round'),
+            (5, 8, 'Center', 'occupied', 40, 40, 'rectangle'),
+            (6, 2, 'Bar', 'available', 60, 40, 'round'),
+            (7, 4, 'Patio', 'available', 20, 60, 'square'),
+            (8, 4, 'Center', 'occupied', 40, 60, 'round'),
+            (9, 6, 'Corner', 'maintenance', 60, 60, 'square'),
+            (10, 4, 'Window', 'available', 80, 20, 'square'),
+            (11, 2, 'Bar', 'available', 80, 40, 'round'),
+            (12, 6, 'Patio', 'available', 80, 60, 'rectangle')
+            """
+            
+            result2 = execute_mysql_query_with_recovery(insert_query)
+            
+            return {
+                'table_created': True,
+                'sample_data_inserted': True,
+                'message': 'Tabla de mesas creada y datos de ejemplo insertados'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creando tabla de mesas: {e}")
+            raise
     
     def fix_company_settings_table(self):
         """Add missing columns to company_settings table"""
@@ -7584,13 +7976,17 @@ if __name__ == "__main__":
     print("\n✨ Servidor listo para recibir conexiones\n")
     
     # Inicializar pool una vez al inicio
+    print("🔄 Inicializando pool de conexiones...")
     if not init_pool():
         print("❌ Error: No se pudo conectar a la base de datos")
         exit(1)
+    print("✅ Pool inicializado correctamente")
     
     # Crear y ejecutar servidor
     try:
+        print(f"🚀 Iniciando servidor en puerto {PORT}...")
         with ThreadedTCPServer(("0.0.0.0", PORT), CompleteServerHandler) as httpd:
+            print(f"✅ Servidor escuchando en http://0.0.0.0:{PORT}")
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n👋 Servidor detenido por usuario")
