@@ -37,7 +37,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: HomeIcon, color: '#4ECDC4', translationKey: 'menu.dashboard' },
-  { name: 'Mesas', path: '/tables', icon: TableCellsIcon, color: '#FF6B6B', translationKey: 'menu.tables' },
+  { name: 'Mesas', path: '/tables3d', icon: TableCellsIcon, color: '#FF6B6B', translationKey: 'menu.tables' },
   { name: 'Nueva Orden', path: '/orders/new', icon: ShoppingCartIcon, color: '#FFD93D', translationKey: 'menu.newOrder' },
   { name: 'POS', path: '/pos', icon: CreditCardIcon, color: '#6BCF7F', translationKey: 'menu.pos' },
   { name: 'Cocina', path: '/kitchen', icon: ChefHatIcon, color: '#FF8C42', translationKey: 'menu.kitchen' },

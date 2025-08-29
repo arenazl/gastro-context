@@ -48,6 +48,7 @@ export const TopBar: React.FC<TopBarProps> = ({ restaurantName = 'Gastro Restaur
     switch(path) {
       case '/dashboard': return { name: t('menu.dashboard'), icon: HomeIcon, color: '#4ECDC4' };
       case '/tables': return { name: t('menu.tables'), icon: TableCellsIcon, color: '#FF6B6B' };
+      case '/tables3d': return { name: t('menu.tables'), icon: TableCellsIcon, color: '#FF6B6B' };
       case '/orders/new': return { name: t('menu.newOrder'), icon: ShoppingCartIcon, color: '#FFD93D' };
       case '/kitchen': return { name: t('menu.kitchen'), icon: FireIcon, color: '#FF8C42' };
       case '/pos': return { name: t('menu.pos'), icon: CreditCardIcon, color: '#6BCF7F' };

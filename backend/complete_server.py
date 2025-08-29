@@ -3701,6 +3701,52 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
                 logger.error(f"Error actualizando mesa: {e}")
                 self.send_error_response(500, str(e))
                 
+        # Update decorative object
+        elif path.startswith('/api/decorative-objects/'):
+            try:
+                object_id = path.split('/')[-1]
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+                
+                connection = None
+                cursor = None
+                try:
+                    connection = connection_pool.get_connection()
+                    cursor = connection.cursor()
+                    
+                    query = """
+                        UPDATE decorative_objects 
+                        SET x = %s, y = %s, width = %s, height = %s, rotation = %s, locked = %s
+                        WHERE id = %s
+                    """
+                    params = (
+                        data.get('x', 0),
+                        data.get('y', 0),
+                        data.get('width', 50),
+                        data.get('height', 50),
+                        data.get('rotation', 0),
+                        data.get('locked', False),
+                        object_id
+                    )
+                    cursor.execute(query, params)
+                    connection.commit()
+                    
+                    self.send_json_response({
+                        'success': True,
+                        'message': 'Objeto decorativo actualizado'
+                    })
+                    
+                finally:
+                    if cursor: cursor.close()
+                    if connection: connection.close()
+                    
+            except json.JSONDecodeError:
+                self.send_error_response(400, "JSON inválido")
+            except Exception as e:
+                logger.error(f"Error actualizando objeto decorativo: {e}")
+                self.send_error_response(500, str(e))
+                
         elif path.startswith('/api/kitchen/queue/'):
             # Actualizar estado de item en cola de cocina
             try:
@@ -4894,6 +4940,51 @@ class CompleteServerHandler(http.server.SimpleHTTPRequestHandler):
             
         except Exception as e:
             logger.error(f"Error creando tabla de mesas: {e}")
+            raise
+    
+    def create_decorative_objects_table(self):
+        """Create decorative_objects table if it doesn't exist"""
+        try:
+            # Crear tabla si no existe
+            create_query = """
+            CREATE TABLE IF NOT EXISTS decorative_objects (
+                id VARCHAR(50) PRIMARY KEY,
+                type VARCHAR(50) NOT NULL,
+                x INT DEFAULT 0,
+                y INT DEFAULT 0,
+                width INT DEFAULT 100,
+                height INT DEFAULT 100,
+                rotation INT DEFAULT 0,
+                locked BOOLEAN DEFAULT FALSE,
+                environment VARCHAR(50) DEFAULT 'main',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+            
+            result = execute_mysql_query_with_recovery(create_query)
+            
+            # Insertar objetos decorativos de ejemplo
+            insert_query = """
+            INSERT IGNORE INTO decorative_objects (id, type, x, y, width, height, rotation, locked, environment) VALUES
+            ('bar-1', 'bar', 200, 100, 200, 80, 0, FALSE, 'main'),
+            ('kitchen-1', 'kitchen', 400, 100, 180, 80, 0, FALSE, 'main'),
+            ('bathroom-1', 'bathroom', 600, 100, 100, 70, 0, FALSE, 'main'),
+            ('door-1', 'door', 100, 300, 80, 60, 0, FALSE, 'main'),
+            ('wall-1', 'wall', 300, 300, 200, 20, 0, FALSE, 'main'),
+            ('plant-1', 'plant', 500, 300, 60, 60, 0, FALSE, 'main')
+            """
+            
+            result2 = execute_mysql_query_with_recovery(insert_query)
+            
+            return {
+                'table_created': True,
+                'sample_data_inserted': True,
+                'message': 'Tabla de objetos decorativos creada y datos de ejemplo insertados'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creando tabla de objetos decorativos: {e}")
             raise
     
     def fix_company_settings_table(self):
