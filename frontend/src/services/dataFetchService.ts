@@ -1,5 +1,5 @@
 // Servicio global para manejo de requests con cache y notificaciones
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 
 interface CacheEntry {
   data: any;

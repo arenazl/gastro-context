@@ -15,7 +15,7 @@ import {
   ArrowUp, ArrowDown, Zap, TrendingUp as TrendIcon
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import { useTranslation } from 'react-i18next';
 import { useLocalization } from '../contexts/LocalizationContext';
 

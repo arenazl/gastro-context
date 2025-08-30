@@ -9,7 +9,7 @@ import { GlassPanel, AnimatedCard, AnimatedList, FloatingButton, GradientText } 
 import { CategoryIcon } from '../components/CategoryIcon';
 import { PageHeader } from '../components/PageHeader';
 import { PaymentModal } from '../components/PaymentModal';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import Swal from 'sweetalert2';
 import {
   ShoppingCartIcon,

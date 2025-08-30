@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/PageHeader';
-import { toast } from 'react-toastify';
+import { toast } from '../../lib/toast';
 import {
   ClockIcon,
   FireIcon,

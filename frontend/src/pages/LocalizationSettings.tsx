@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel } from '../components/AnimatedComponents';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import {
   GlobeAltIcon,
   ClockIcon,

@@ -11,7 +11,7 @@ import {
   Calendar, Download, RefreshCw, Filter
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 
 
 // Colores para gráficos

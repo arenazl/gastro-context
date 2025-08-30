@@ -14,7 +14,7 @@ import {
   Building2,
   QrCode
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 
 interface PaymentModalProps {
   isOpen: boolean;

@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel } from '../components/AnimatedComponents';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import {
   BuildingOfficeIcon,
   GlobeAltIcon,

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { PermissionGate, RequireResource, usePermissionCheck } from '../components/PermissionGate';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../config/api';
 
 interface Employee {

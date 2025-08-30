@@ -3,8 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LocalizationProvider } from './contexts/LocalizationContext';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { Toaster } from 'sonner';
 import { CollapsibleLayout as Layout } from './components/CollapsibleLayout';
 import { LoginModern as Login } from './pages/LoginModern';
 import { DashboardModern as Dashboard } from './pages/DashboardModern';
@@ -43,19 +42,18 @@ function App() {
           <AuthProvider>
             <PermissionsProvider>
               <ThemeSwitcher />
-          <ToastContainer 
-            position="top-right"
-            autoClose={3000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-            theme="colored"
-            style={{ zIndex: 9999 }}
-          />
+              {/* Toaster global - disponible en todas las rutas */}
+              <Toaster 
+                position="bottom-right"
+                toastOptions={{
+                  style: {
+                    background: 'white',
+                    color: 'black',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  },
+                }}
+              />
         <Routes>
           <Route path="/login" element={<Login />} />
           

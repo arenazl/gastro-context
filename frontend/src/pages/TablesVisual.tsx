@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { TableLayoutDesigner } from '../components/TableLayoutDesigner';
 import { PageHeader } from '../components/PageHeader';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import {
   Grid,
   Map,

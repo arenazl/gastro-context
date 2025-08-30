@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dataFetchService from '../services/dataFetchService';
 import { ImageWithSkeleton } from '../components/ImageWithSkeleton';
 import { imageCacheService } from '../services/imageCache.service';
+import { toast } from '../lib/toast';
 
 import {
   ShoppingCartIcon,
@@ -299,12 +300,22 @@ export const InteractiveMenuSingleScreen: React.FC = () => {
       setCart(prev => {
         const existing = prev.find(item => item.id === product.id);
         if (existing) {
+          // Mostrar toast de actualización de cantidad
+          toast.success(`${product.name} agregado al carrito`, {
+            title: `Cantidad: ${existing.quantity + 1}`,
+            duration: 2000
+          });
           return prev.map(item =>
             item.id === product.id
               ? { ...item, quantity: item.quantity + 1 }
               : item
           );
         }
+        // Mostrar toast de producto nuevo agregado
+        toast.success(`${product.name} agregado al carrito`, {
+          title: "¡Producto añadido!",
+          duration: 2000
+        });
         return [...prev, { ...product, quantity: 1 }];
       });
 

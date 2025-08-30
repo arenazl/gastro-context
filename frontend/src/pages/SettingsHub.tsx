@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 
 interface SettingSection {
   id: string;

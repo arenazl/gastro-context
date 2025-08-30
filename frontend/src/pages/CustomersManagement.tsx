@@ -3,7 +3,7 @@ import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { PageHeader } from '../components/PageHeader';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import { 
   PlusCircle, 
   Search, 

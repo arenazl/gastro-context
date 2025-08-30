@@ -25,7 +25,7 @@ import {
   Image,
   Layers
 } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 
 interface Table {
   id: number;

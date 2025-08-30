@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 import { PageHeader } from '../components/PageHeader';
 import { GlassPanel, AnimatedCard, FloatingButton } from '../components/AnimatedComponents';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import { useTranslation } from 'react-i18next';
 import { useLocalization } from '../contexts/LocalizationContext';
 import {

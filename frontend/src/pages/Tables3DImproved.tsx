@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { toast } from 'react-toastify';
+import { toast } from '../lib/toast';
 import {
   Users, Clock, CheckCircle, AlertCircle, Utensils, Coffee, Wine, ChefHat,
   Eye, Layers, Grid, Map, Maximize2, TreePine, Flame, Lamp, Menu, X,

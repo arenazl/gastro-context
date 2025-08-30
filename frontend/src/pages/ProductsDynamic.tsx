@@ -32,7 +32,6 @@ import {
   Home,
   Building
 } from 'lucide-react';
-import { toast } from 'react-toastify';
 import { PageHeader } from '../components/PageHeader';
 import { SlideDrawer } from '../components/SlideDrawer';
 import { ImageWithSkeleton } from '../components/ImageWithSkeleton';

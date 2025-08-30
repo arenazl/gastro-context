@@ -24,7 +24,7 @@ import {
   MapPin,
   List,
 } from "lucide-react";
-import { toast } from "react-toastify";
+import { toast } from "../lib/toast";
 import { PageHeader } from "../components/PageHeader";
 import { motion, AnimatePresence } from "framer-motion";
 
